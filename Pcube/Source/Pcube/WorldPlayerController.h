@@ -4,21 +4,17 @@
 
 #include "CoreMinimal.h"
 #include "GameFramework/PlayerController.h"
-#include "MyPlayerController.generated.h"
+#include "WorldPlayerController.generated.h"
 
 /**
  * 
  */
 UCLASS()
-class PCUBE_API AMyPlayerController : public APlayerController
+class PCUBE_API AWorldPlayerController : public APlayerController
 {
 	GENERATED_BODY()
 	
-public:
-	AMyPlayerController();
-	
 protected:
 	virtual void BeginPlay() override;
-	
 	
 };

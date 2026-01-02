@@ -4,33 +4,34 @@
 
 #include "CoreMinimal.h"
 #include "GameFramework/Character.h"
-#include "BaseUnit.generated.h"
+#include "BattleBaseUnit.generated.h"
 
+class UUnitDataAsset;
 class USkillDataAsset;
 
 UCLASS()
-class PCUBE_API ABaseUnit : public ACharacter
+class PCUBE_API ABattleBaseUnit : public ACharacter
 {
 	GENERATED_BODY()
 
 public:
 	// Sets default values for this pawn's properties
-	ABaseUnit();
+	ABattleBaseUnit();
 
-	// 스탯
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Stats")
-	float MaxHP;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Data")
+	UUnitDataAsset* UnitData;
 	
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Stats")
+	// 스탯
+	UPROPERTY(BlueprintReadOnly, Category = "Stats")
 	float CurrentHP;
 	
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Stats")
-	float AttackPower;
+	UPROPERTY(BlueprintReadOnly, Category = "Stats")
+	float CurrentSpeed;
 	
+	UPROPERTY(BlueprintReadOnly, Category = "Stats")
+	float CurrentAttackPower;
 	
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Stats")
-	float Speed;
-	
+	// 턴 관리를 위한 행동 수치
 	UPROPERTY(BlueprintReadOnly)
 	float CurrentActionValue;
 	
@@ -38,17 +39,19 @@ public:
 	UPROPERTY(EditAnywhere, Category = "Skills")
 	TArray<USkillDataAsset*> Skills;
 	
+	// --- 전투 핵심 로직
 	// 언리얼 기본 데미지 함수
 	virtual float TakeDamage(float DamageAmount, struct FDamageEvent const& DamageEvent, class AController* EventInstigator, AActor* DamageCauser) override;
 	
 	// 공통 일반 공격 함수
-	virtual  void BasicAttack(ABaseUnit* Target);
+	virtual  void BasicAttack(ABattleBaseUnit* Target);
 	
 	// 사망 처리 함수
 	virtual  void Die();
 	
-	// 턴 시작 시 호출되는 함수
-	virtual  void OnTurnStarted();
+	// 턴 매니저가 호출할 함수
+	// TODO: 특정 스킬 사용 후, 몇 턴 동안 매 턴 시작마다 발동하는 스킬 추가
+	virtual void OnTurnStarted();
 	
 protected:
 	// Called when the game starts or when spawned
@@ -60,12 +63,5 @@ protected:
 	// 선택 상태 관리 변수
 	UPROPERTY(BlueprintReadOnly, Category="Selection")
 	bool bIsSelected;
-	
-public:	
-	// Called every frame
-	virtual void Tick(float DeltaTime) override;
-
-	// Called to bind functionality to input
-	virtual void SetupPlayerInputComponent(class UInputComponent* PlayerInputComponent) override;
 
 };

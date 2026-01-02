@@ -14,4 +14,6 @@ class PCUBE_API AWorldGameMode : public AGameModeBase
 {
 	GENERATED_BODY()
 	
+public:
+	AWorldGameMode();
 };

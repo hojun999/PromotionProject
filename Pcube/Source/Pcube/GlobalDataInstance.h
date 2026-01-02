@@ -11,7 +11,7 @@
  * 
  */
 
-class ABaseUnit;
+class ABattleBaseUnit;
 
 USTRUCT(BlueprintType)
 struct FBattleEncounterInfo
@@ -20,7 +20,7 @@ struct FBattleEncounterInfo
 	
 	// 전투에 등장할 적 클래스 목록
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Battle")
-	TArray<TSubclassOf<ABaseUnit>> EnemyClasses;
+	TArray<TSubclassOf<ABattleBaseUnit>> EnemyClasses;
 	
 	// 전투가 끝난 후 돌아갈 맵 이름
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Level")
@@ -48,5 +48,5 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Combat")
 	FBattleEncounterInfo BattleInfo;
 	
-	void SetupBattle(const TArray<TSubclassOf<ABaseUnit>>& InEnemies, FVector InLocation, FRotator InRotation);
+	void SetupBattle(const TArray<TSubclassOf<ABattleBaseUnit>>& InEnemies, FVector InLocation, FRotator InRotation);
 };

@@ -3,14 +3,14 @@
 #pragma once
 
 #include "CoreMinimal.h"
-#include "BaseUnit.h"
-#include "AllyUnit.generated.h"
+#include "BattleBaseUnit.h"
+#include "BattleAllyUnit.generated.h"
 
 /**
  * 
  */
 UCLASS()
-class PCUBE_API AAllyUnit : public ABaseUnit
+class PCUBE_API ABattleAllyUnit : public ABattleBaseUnit
 {
 	GENERATED_BODY()
 	

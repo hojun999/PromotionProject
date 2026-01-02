@@ -3,17 +3,15 @@
 #pragma once
 
 #include "CoreMinimal.h"
-#include "GameFramework/GameModeBase.h"
-#include "MyGameModeBase.generated.h"
+#include "WorldBaseUnit.h"
+#include "WorldEnemyUnit.generated.h"
 
 /**
  * 
  */
 UCLASS()
-class PCUBE_API AMyGameModeBase : public AGameModeBase
+class PCUBE_API AWorldEnemyUnit : public AWorldBaseUnit
 {
 	GENERATED_BODY()
 	
-public:
-	AMyGameModeBase();
 };

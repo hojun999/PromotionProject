@@ -1,14 +1,14 @@
 // Fill out your copyright notice in the Description page of Project Settings.
 
 
-#include "EnemyUnit.h"
+#include "BattleEnemyUnit.h"
 
-AEnemyUnit::AEnemyUnit()
+ABattleEnemyUnit::ABattleEnemyUnit()
 {
 	
 }
 
-void AEnemyUnit::Die()
+void ABattleEnemyUnit::Die()
 {
 	// DropTable 에 등록된 모든 재화에 대해 루프 실행
 	for (const FDropInfo& Drop : DropTable)

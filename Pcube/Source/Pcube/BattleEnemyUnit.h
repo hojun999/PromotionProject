@@ -3,8 +3,8 @@
 #pragma once
 
 #include "CoreMinimal.h"
-#include "BaseUnit.h"
-#include "EnemyUnit.generated.h"
+#include "BattleBaseUnit.h"
+#include "BattleEnemyUnit.generated.h"
 
 /**
  * 
@@ -27,12 +27,12 @@ struct FDropInfo
 };
 
 UCLASS()
-class PCUBE_API AEnemyUnit : public ABaseUnit
+class PCUBE_API ABattleEnemyUnit : public ABattleBaseUnit
 {
 	GENERATED_BODY()
 	
 public:
-	AEnemyUnit();
+	ABattleEnemyUnit();
 	
 	UPROPERTY(EditAnywhere, Category="Drop")
 	TArray<FDropInfo> DropTable;

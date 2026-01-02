@@ -1,9 +1,9 @@
-#include "AllyUnit.h"
+#include "BattleAllyUnit.h"
 #include "Blueprint/UserWidget.h"
 #include "Blueprint/WidgetLayoutLibrary.h"
 #include "Kismet/GameplayStatics.h"
 
-void AAllyUnit::NotifyActorOnClicked(FKey ButtonPressed)
+void ABattleAllyUnit::NotifyActorOnClicked(FKey ButtonPressed)
 {
 	Super::NotifyActorOnClicked(ButtonPressed);
 
