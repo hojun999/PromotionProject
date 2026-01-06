@@ -25,7 +25,7 @@ protected:
 	// 입력 함수
 	// if: enhanced input system 사용하면 필요 없을 수도?
 	void MoveForward(float Value);	// + -> 위, - -> 아래
-	void MoveRight(float Value);  // + -> 오른쪽, - -> 왼쪽 
+	void MoveRight(float Value);  // + -> 오른쪽, - -> 왼쪽
 	
 private:
 	// 카메라 컴포넌트
