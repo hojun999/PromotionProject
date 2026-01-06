@@ -27,11 +27,10 @@ protected:
 	void MoveForward(float Value);	// + -> 위, - -> 아래
 	void MoveRight(float Value);  // + -> 오른쪽, - -> 왼쪽
 	
-private:
 	// 카메라 컴포넌트
-	UPROPERTY(VisibleAnywhere, Category="Camera", meta=(AllowPrivateAccess = "true"))
-	USpringArmComponent* SpringArm;
+	UPROPERTY(VisibleAnywhere, Category="Camera")
+	USpringArmComponent* PlayerSpringArm;
 	
-	UPROPERTY(VisibleAnywhere, Category="Camera", meta=(AllowPrivateAccess = "true"))
-	UCameraComponent* Camera;
+	UPROPERTY(VisibleAnywhere, Category="Camera")
+	UCameraComponent* PlayerCamera;
 };
