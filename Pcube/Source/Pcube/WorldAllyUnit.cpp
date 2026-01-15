@@ -11,7 +11,8 @@ AWorldAllyUnit::AWorldAllyUnit()
 	// 카메라 설정 (쿼터뷰 시점)
 	PlayerSpringArm = CreateDefaultSubobject<USpringArmComponent>(TEXT("PlayerSpringArm"));
 	PlayerSpringArm->SetupAttachment(RootComponent);
-	PlayerSpringArm->TargetArmLength = 1600.0f;
+	PlayerSpringArm->TargetArmLength = 700.0f;
+	PlayerSpringArm->SetRelativeLocation(FVector(25.0f, 0.0f, 50.f));
 	PlayerSpringArm->SetRelativeRotation(FRotator(-25.0f, 0.0f, 0.0f)); // 시점 고정
 	PlayerSpringArm->bDoCollisionTest = false; // Collision 충돌 시 카메라 줌인 방지
 	PlayerSpringArm->bInheritYaw = false; // 컨트롤러 회전에 의한 카메라 회전 영향 방지
