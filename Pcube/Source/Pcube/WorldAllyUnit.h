@@ -28,7 +28,7 @@ protected:
 	void MoveRight(float Value);  // + -> 오른쪽, - -> 왼쪽
 	
 	// 카메라 컴포넌트
-	UPROPERTY(VisibleAnywhere, Category="Camera")
+	UPROPERTY(VisibleAnywhere,  Category="Camera")
 	USpringArmComponent* PlayerSpringArm;
 	
 	UPROPERTY(VisibleAnywhere, Category="Camera")
