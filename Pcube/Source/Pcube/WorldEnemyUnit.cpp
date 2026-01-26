@@ -6,13 +6,21 @@
 #include "UnitDataAsset.h"
 #include "WorldAllyUnit.h"
 #include "Components/SphereComponent.h"
+#include "Components/CapsuleComponent.h"
 #include "Kismet/GameplayStatics.h"
 
 AWorldEnemyUnit::AWorldEnemyUnit()
 {
+	// 감지용 collision
 	DetectSphere = CreateDefaultSubobject<USphereComponent>(TEXT("DetectSphere"));
 	DetectSphere->SetupAttachment(RootComponent);
-	DetectSphere->SetSphereRadius(600.f);	// 감지 범위 설정
+	DetectSphere->SetSphereRadius(400.f);	// 감지 범위 설정
+	//  감지 component는 물리적 충돌 없이 overlap만 판정
+	DetectSphere->SetCollisionResponseToAllChannels(ECR_Ignore);
+	DetectSphere->SetCollisionResponseToChannel(ECC_Pawn, ECR_Overlap);
+	
+	// 본체 collision (전투 진입-레벨 전환 범위)
+	GetCapsuleComponent()->SetCollisionResponseToChannel(ECC_Pawn, ECR_Overlap);
 }
 
 void AWorldEnemyUnit::BeginPlay()
@@ -24,42 +32,59 @@ void AWorldEnemyUnit::BeginPlay()
 	{
 		DetectSphere->OnComponentBeginOverlap.AddDynamic(this, &AWorldEnemyUnit::OnDetectOverlap);
 	}
+	
+	// 전투 시작 이벤트 바인딩
+	if (GetCapsuleComponent())
+	{
+		GetCapsuleComponent()->OnComponentBeginOverlap.AddDynamic(this, &AWorldEnemyUnit::OnEncounterOverlap);
+	}
 }
 
+// 플레이어 발견 시 로직 - sphere에 닿은 경우
 void AWorldEnemyUnit::OnDetectOverlap(UPrimitiveComponent* OverlappedComponent, AActor* OtherActor, 
 									  UPrimitiveComponent* OtherComp, int32 OtherBodyIndex, 
 									  bool bFromSweep, const FHitResult& SweepResult)
 {
-	if (OtherActor && (OtherActor != this))
+	if (OtherActor && OtherActor->IsA(AWorldAllyUnit::StaticClass()))
 	{
 		UE_LOG(LogTemp, Warning, TEXT("Detected Actor: %s"), *OtherActor->GetName());
 		// TODO: 추격 AI 로직을 작성, AI controller를 사용하여 Player를 향해 MoveTo 실행
 	}
 }
 
-void AWorldEnemyUnit::NotifyActorBeginOverlap(AActor* OtherActor)
+// 플레이어와 충돌 시 로직 - capsule에 닿은 경우
+void AWorldEnemyUnit::OnEncounterOverlap(UPrimitiveComponent* OverlappedComponent, AActor* OtherActor,
+										UPrimitiveComponent* OtherComp, int32 OtherBodyIndex,
+										bool bFromSweep, const FHitResult& SweepResult)
 {
-	Super::NotifyActorBeginOverlap(OtherActor);
-	
-	// 플레이어와 부딪혔을 때 인카운터 발생
-	if (OtherActor->IsA(AWorldAllyUnit::StaticClass()))
+	if (OtherActor && OtherActor->IsA(AWorldAllyUnit::StaticClass()))
 	{
 		StartEncounter(OtherActor);
 	}
 }
+
 
 void AWorldEnemyUnit::StartEncounter(AActor* PlayerActor)
 {
 	UGlobalDataInstance* GI = Cast<UGlobalDataInstance>(GetGameInstance());
 	AWorldAllyUnit* PlayerUnit = Cast<AWorldAllyUnit>(PlayerActor);
 	
+	if (UnitData == nullptr)
+	{
+		UE_LOG(LogTemp, Error, TEXT("Enemy [%s] has NO UnitData! 할당을 확인하세요."), *GetName());
+		return;
+	}
+	
 	if (GI && PlayerUnit)
 	{
+		UE_LOG(LogTemp, Error, TEXT("Encounter Started! Loading Battle Level..."));
+		
 		// 플레이어 데이터와 Enemy 데이터를 GameInstance에 저장
 		GI->BattleInfo.EnemyClasses.Empty();
 		GI->BattleInfo.EnemyClasses.Add(UnitData->BattleUnitClass);
 		GI->BattleInfo.SourceLevelName = FName(*GetWorld()->GetMapName());
 		GI->BattleInfo.ReturnLocation = PlayerActor->GetActorLocation();
+		GI->BattleInfo.ReturnRotation = PlayerActor->GetActorRotation();
 		
 		UGameplayStatics::OpenLevel(this, FName("BattleLevel"));
 	}

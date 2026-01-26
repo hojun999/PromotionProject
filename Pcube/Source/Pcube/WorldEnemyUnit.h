@@ -32,8 +32,10 @@ protected:
 						UPrimitiveComponent* OtherComp, int32 OtherBodyIndex, 
 						bool bFromSweep, const FHitResult& SweepResult);
 	
-	// 인카운터 발생 함수 (캡슐 컴포넌트 충돌 시 호출)
-	virtual void NotifyActorBeginOverlap(AActor* OtherActor) override;
+	UFUNCTION()
+	void OnEncounterOverlap(UPrimitiveComponent* OverlappedComponent, AActor* OtherActor,
+						UPrimitiveComponent* OtherComp, int32 OtherBodyIndex,
+						bool bFromSweep, const FHitResult& SweepResult);
 	
 private:
 	void StartEncounter(AActor* PlayerActor);
