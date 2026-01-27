@@ -26,8 +26,6 @@ class PCUBE_API ABattleGameMode : public AGameModeBase
 	GENERATED_BODY()
 	
 public:
-	virtual void BeginPlay() override;
-	
 	// 현재 전투 상태
 	UPROPERTY(BlueprintReadOnly, Category="Battle")
 	EBattleState CurrentState;

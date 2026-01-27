@@ -8,7 +8,7 @@
 #include "Components/SphereComponent.h"
 #include "Components/CapsuleComponent.h"
 #include "Kismet/GameplayStatics.h"
-#include "Blueprint/AIBlueprintHelperLibrary.h"
+//#include "Blueprint/AIBlueprintHelperLibrary.h"
 
 AWorldEnemyUnit::AWorldEnemyUnit()
 {
@@ -53,10 +53,10 @@ void AWorldEnemyUnit::OnDetectOverlap(UPrimitiveComponent* OverlappedComponent, 
 		UE_LOG(LogTemp, Warning, TEXT("플레이어 감지: %s"), *Player->GetName());
 		
 		// (아래 로직 이후에 수정 가능성 있음) TODO: 추격 AI 로직을 작성, AI controller를 사용하여 Player를 향해 MoveTo 실행
-		if (GetController())
-		{
-			UAIBlueprintHelperLibrary::SimpleMoveToActor(GetController(), Player);
-		}
+		// if (GetController())
+		// {
+		// 	UAIBlueprintHelperLibrary::SimpleMoveToActor(GetController(), Player);
+		// }
 	}
 }
 
@@ -74,6 +74,12 @@ void AWorldEnemyUnit::OnEncounterOverlap(UPrimitiveComponent* OverlappedComponen
 
 void AWorldEnemyUnit::StartEncounter(AActor* PlayerActor)
 {
+	if (!EncounterData)
+	{
+		UE_LOG(LogTemp, Error, TEXT("[%s] 에 EncounterDataAsset이 할당되지 않았습니다!"), *GetName());
+		return;
+	}
+	
 	UGlobalDataInstance* GI = Cast<UGlobalDataInstance>(GetGameInstance());
 	AWorldAllyUnit* PlayerUnit = Cast<AWorldAllyUnit>(PlayerActor);
 	
@@ -86,6 +92,8 @@ void AWorldEnemyUnit::StartEncounter(AActor* PlayerActor)
 	if (GI && PlayerUnit)
 	{
 		UE_LOG(LogTemp, Error, TEXT("Encounter Started! Loading Battle Level..."));
+		
+		//GI->BattleInfo.EnemyClasses = EncounterData->EnemyGroup;
 		
 		// 플레이어 데이터와 Enemy 데이터를 GameInstance에 저장
 		GI->BattleInfo.EnemyClasses.Empty();

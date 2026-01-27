@@ -30,13 +30,16 @@ struct FBattleEncounterInfo
 	// 필드 맵에서 플레이어가 서 있던 위치와 방향
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Level")
 	FVector ReturnLocation;
-	
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Level")
 	FRotator ReturnRotation;
 	
-	// 전투 배경 테마
+	// 전투 배경 테마 정보
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Environment")
 	int32 BattleBackgroundID;
+	
+	// 전투에 참여할 유닛과 위치 정보 배열 - 위의 EnemyClasses와 겹치는 듯? 위에 거 사용이 맞는 것 같음. 확인 후 삭제*****
+	// UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	// TArray<FEncounterUnit> EnemyGroup;
 };
 
 UCLASS()
