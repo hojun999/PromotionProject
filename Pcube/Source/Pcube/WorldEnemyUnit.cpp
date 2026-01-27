@@ -8,6 +8,7 @@
 #include "Components/SphereComponent.h"
 #include "Components/CapsuleComponent.h"
 #include "Kismet/GameplayStatics.h"
+#include "Blueprint/AIBlueprintHelperLibrary.h"
 
 AWorldEnemyUnit::AWorldEnemyUnit()
 {
@@ -45,10 +46,17 @@ void AWorldEnemyUnit::OnDetectOverlap(UPrimitiveComponent* OverlappedComponent, 
 									  UPrimitiveComponent* OtherComp, int32 OtherBodyIndex, 
 									  bool bFromSweep, const FHitResult& SweepResult)
 {
-	if (OtherActor && OtherActor->IsA(AWorldAllyUnit::StaticClass()))
+	AWorldAllyUnit* Player = Cast<AWorldAllyUnit>(OtherActor);
+	
+	if (Player)
 	{
-		UE_LOG(LogTemp, Warning, TEXT("Detected Actor: %s"), *OtherActor->GetName());
-		// TODO: 추격 AI 로직을 작성, AI controller를 사용하여 Player를 향해 MoveTo 실행
+		UE_LOG(LogTemp, Warning, TEXT("플레이어 감지: %s"), *Player->GetName());
+		
+		// (아래 로직 이후에 수정 가능성 있음) TODO: 추격 AI 로직을 작성, AI controller를 사용하여 Player를 향해 MoveTo 실행
+		if (GetController())
+		{
+			UAIBlueprintHelperLibrary::SimpleMoveToActor(GetController(), Player);
+		}
 	}
 }
 

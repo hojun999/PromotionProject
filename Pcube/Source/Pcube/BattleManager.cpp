@@ -27,6 +27,5 @@ void ABattleManager::BeginPlay()
 void ABattleManager::Tick(float DeltaTime)
 {
 	Super::Tick(DeltaTime);
-
 }
 

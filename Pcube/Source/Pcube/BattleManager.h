@@ -15,17 +15,19 @@ public:
 	// Sets default values for this actor's properties
 	ABattleManager();
 
-private:
+	// BattleGameMode에서 호출할 전투 시작 함수
+	void InitiateBattle();
+	
+protected:
+	// Called when the game starts or when spawned
+	virtual void BeginPlay() override;
+
 	UPROPERTY(VisibleAnywhere)
 	class USpawnComponent* SpawnComp;
 	
 	UPROPERTY(VisibleAnywhere)
 	class UTurnComponent* TurnComp;
 	
-protected:
-	// Called when the game starts or when spawned
-	virtual void BeginPlay() override;
-
 public:	
 	// Called every frame
 	virtual void Tick(float DeltaTime) override;
