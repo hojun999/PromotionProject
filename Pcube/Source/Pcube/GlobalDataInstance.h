@@ -15,7 +15,7 @@ class UUnitDataAsset;
 class ABattleBaseUnit;
 
 USTRUCT(BlueprintType)
-struct FBattleEncounterInfo
+struct FBattleDataInfo
 {
 	GENERATED_BODY()
 	
@@ -23,23 +23,25 @@ struct FBattleEncounterInfo
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Battle")
 	TArray<TSubclassOf<ABattleBaseUnit>> EnemyClasses;
 	
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	TMap<FString, UUnitDataAsset*> EnemySpawnMap;
+	
 	// 전투가 끝난 후 돌아갈 맵 이름
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Level")
 	FName SourceLevelName;
 	
-	// 필드 맵에서 플레이어가 서 있던 위치와 방향
+	
+	// TODO: 플레이어 Return 정보는 분리할 필요가 있어보임
+	// 필드 맵에서 플레이어가 서 있던 위치와 방향 (WolrdLevel 복귀 위치 정보)
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Level")
 	FVector ReturnLocation;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Level")
 	FRotator ReturnRotation;
 	
+	// TODO: 배경 오브젝트에 대한 정보는 분리할 필요가 있어보임
 	// 전투 배경 테마 정보
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Environment")
 	int32 BattleBackgroundID;
-	
-	// 전투에 참여할 유닛과 위치 정보 배열 - 위의 EnemyClasses와 겹치는 듯? 위에 거 사용이 맞는 것 같음. 확인 후 삭제*****
-	// UPROPERTY(EditAnywhere, BlueprintReadWrite)
-	// TArray<FEncounterUnit> EnemyGroup;
 };
 
 UCLASS()
@@ -50,7 +52,7 @@ class PCUBE_API UGlobalDataInstance : public UGameInstance
 public:
 	// 현재 활성화된 전투 정보 (레벨 이동 시 해당 데이터 참조)
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Combat")
-	FBattleEncounterInfo BattleInfo;
+	FBattleDataInfo BattleInfo;
 	
-	void SetupBattle(const TArray<TSubclassOf<ABattleBaseUnit>>& InEnemies, FVector InLocation, FRotator InRotation);
+	//void SetupBattle(const TArray<TSubclassOf<ABattleBaseUnit>>& InEnemies, FVector InLocation, FRotator InRotation);
 };

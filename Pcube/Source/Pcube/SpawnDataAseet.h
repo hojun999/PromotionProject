@@ -4,12 +4,12 @@
 
 #include "CoreMinimal.h"
 #include "Engine/DataAsset.h"
-#include "EncounterDataAsset.generated.h"
+#include "SpawnDataAseet.generated.h"
 
 class UUnitDataAsset;
 
 USTRUCT(BlueprintType)
-struct FEncounterUnit
+struct FEnemySpawnGroup
 {
 	GENERATED_BODY()
 	
@@ -28,16 +28,17 @@ struct FEncounterUnit
 	// 아래 구조체 코드는 이후에 json 파싱을 고려하여 작성됨 *****
 	
 	// string 값 = key 값
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Battle")
-	FString PositionName;
-	
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Battle")
-	UUnitDataAsset* UnitData;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	TMap<FString, UUnitDataAsset*> SpawnMap;
 };
 
 UCLASS()
-class PCUBE_API UEncounterDataAsset : public UPrimaryDataAsset
+class PCUBE_API USpawnDataAseet : public UPrimaryDataAsset
 {
 	GENERATED_BODY()
 	
+public:
+	// 유닛 배치 조합 (사용자 정의)
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Battle")
+	TArray<FEnemySpawnGroup> SpawnGroups;
 };

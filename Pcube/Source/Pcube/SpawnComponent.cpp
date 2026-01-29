@@ -4,6 +4,10 @@
 #include "Engine/GameInstance.h"
 #include "SpawnComponent.h"
 
+#include "BattleBaseUnit.h"
+#include "UnitDataAsset.h"
+#include "Kismet/GameplayStatics.h"
+
 // Sets default values for this component's properties
 USpawnComponent::USpawnComponent()
 {
@@ -36,16 +40,39 @@ void USpawnComponent::TickComponent(float DeltaTime, ELevelTick TickType, FActor
 void USpawnComponent::SpawnUnitsFromGI()
 {
 	UGlobalDataInstance* GI = Cast<UGlobalDataInstance>(GetWorld()->GetGameInstance());
-	if (!GI)
+	if (!GI || GI->BattleInfo.EnemySpawnMap.Num() == 0)
 	{
 		return;
 	}
 	
-	for (FEncounterUnit& Unit : GI->BattleInfo.EnemyGroup)
+	// TMap 순회 (Key: SpawnLotation, Value: UnitData)
+	for (auto& Elem : GI->BattleInfo.EnemySpawnMap)
 	{
-		//TODO:
-		// PositionName을 통해 스폰 위치 찾기
-		// UnitData를 통해 폰 스폰
-		UE_LOG(LogTemp, Log, TEXT("Spawning %s at slot %s"), *Unit.UnitData->UnitName, *Unit.SlotName);
+		const FString& SpawnLotation = Elem.Key;
+		UUnitDataAsset* UnitData = Elem.Value;
+		
+		if (!UnitData)
+		{
+			continue;
+		}
+		
+		AActor* SpawnPoint = nullptr;
+		TArray<AActor*> SpawnPoints;
+		UGameplayStatics::GetAllActorsWithTag(GetWorld(), FName(*SpawnLotation), SpawnPoints);
+		
+		if (SpawnPoints.Num() > 0)
+		{
+			SpawnPoint = SpawnPoints[0];
+		}
+		
+		if (SpawnPoint)
+		{
+			GetWorld()->SpawnActor<ABattleBaseUnit>(
+				UnitData->BattleUnitClass,
+				SpawnPoint->GetActorLocation(),
+				SpawnPoint->GetActorRotation()
+			);
+		}
 	}
+	
 }

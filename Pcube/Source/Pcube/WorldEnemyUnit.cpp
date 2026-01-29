@@ -3,6 +3,7 @@
 
 #include "WorldEnemyUnit.h"
 #include "GlobalDataInstance.h"
+#include "SpawnDataAseet.h"
 #include "UnitDataAsset.h"
 #include "WorldAllyUnit.h"
 #include "Components/SphereComponent.h"
@@ -74,9 +75,9 @@ void AWorldEnemyUnit::OnEncounterOverlap(UPrimitiveComponent* OverlappedComponen
 
 void AWorldEnemyUnit::StartEncounter(AActor* PlayerActor)
 {
-	if (!EncounterData)
+	if (!SpawnData)
 	{
-		UE_LOG(LogTemp, Error, TEXT("[%s] 에 EncounterDataAsset이 할당되지 않았습니다!"), *GetName());
+		UE_LOG(LogTemp, Error, TEXT("[%s] 에 SpawnData가 할당되지 않았습니다!"), *GetName());
 		return;
 	}
 	
@@ -95,13 +96,25 @@ void AWorldEnemyUnit::StartEncounter(AActor* PlayerActor)
 		
 		//GI->BattleInfo.EnemyClasses = EncounterData->EnemyGroup;
 		
-		// 플레이어 데이터와 Enemy 데이터를 GameInstance에 저장
-		GI->BattleInfo.EnemyClasses.Empty();
-		GI->BattleInfo.EnemyClasses.Add(UnitData->BattleUnitClass);
+		if (SpawnData->SpawnGroups.Num() >0)
+		{
+			GI->BattleInfo.EnemySpawnMap = SpawnData->SpawnGroups[0].SpawnMap;
+		}
+		else
+		{
+			UE_LOG(LogTemp, Error, TEXT("[%s]의 SpawnGroups 배열이 비어있습니다!"), *SpawnData->GetName());
+			return;
+		}
+		
+		// 플레이어 데이터와 Enemy 데이터를 GameInstance에 저장 (월드 복귀 데이터 저장)
+		// 아래 두 줄 사용 안할 수도? 확인 필요 *****
+		// GI->BattleInfo.EnemyClasses.Empty();
+		// GI->BattleInfo.EnemyClasses.Add(UnitData->BattleUnitClass);
 		GI->BattleInfo.SourceLevelName = FName(*GetWorld()->GetMapName());
 		GI->BattleInfo.ReturnLocation = PlayerActor->GetActorLocation();
 		GI->BattleInfo.ReturnRotation = PlayerActor->GetActorRotation();
 		
+		// 레벨 전환
 		UGameplayStatics::OpenLevel(this, FName("BattleLevel"));
 	}
 }
