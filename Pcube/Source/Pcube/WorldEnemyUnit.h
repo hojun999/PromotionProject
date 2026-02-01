@@ -24,7 +24,7 @@ protected:
 	
 	// 해당 정보는 에디터 인스펙터에서 어떤 적 그룹을 전투에 참여시킬지 선택
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Battle")
-	class USpawnDataAseet* SpawnData;
+	class USpawnDataAsset* SpawnData;
 	
 	void StartEncounter(AActor* PlayerActor);
 	

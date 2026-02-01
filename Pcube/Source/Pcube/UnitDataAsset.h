@@ -3,6 +3,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "BattleEnemyUnit.h"
 #include "Engine/DataAsset.h"
 #include "UnitDataAsset.generated.h"
 
@@ -40,9 +41,24 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Identity")
 	UTexture2D* UnitIcon;
 	
+	// --- 비주얼 설정 ---
+	// 예시용 스태틱 메시
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Visual")
+	UStaticMesh* UnitStaticMesh;
+	
+	// 캐릭터용 스켈레탈 메시 (애니메이션이 필요한 경우)
+	// UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Visual")
+	// USkeletalMesh* UnitSkeletalMesh;
+	
+	// 애니메이션 블루프린트 (공격, 대기 등 동작 제어)
+	// UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Visual")
+	// TSubclassOf<UAnimInstance> AnimBlueprintClass;
+	
+	// ---
+	
 	// 전투용 정보 (전투 레벨에서 소환할 블루프린트 클래스)
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Battle")
-	TSubclassOf<ABattleBaseUnit> BattleUnitClass;
+	TSubclassOf<ABattleEnemyUnit> BattleUnitClass;
 	
 	// 기본 스탯
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Stats")

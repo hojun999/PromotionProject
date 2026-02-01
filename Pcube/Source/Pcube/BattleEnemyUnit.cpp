@@ -3,9 +3,35 @@
 
 #include "BattleEnemyUnit.h"
 
+#include "UnitDataAsset.h"
+
 ABattleEnemyUnit::ABattleEnemyUnit()
 {
+	StaticMeshComp = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("StaticMeshComp"));
+	StaticMeshComp->SetupAttachment(RootComponent);
 	
+	// ACharacter를 상속받으므로 깁본 skeletalmesh 숨기기
+	// TODO: 이후에 Skeletalmesh 사용할 때 아래 내용 삭제
+	if (GetMesh())
+	{
+		GetMesh()->SetHiddenInGame(true);
+	}
+}
+
+void ABattleEnemyUnit::InitUnit(UUnitDataAsset* UnitDataAsset)
+{
+	if (!UnitDataAsset)
+	{
+		return;
+	}
+	
+	// 메시 설정 (Character 상속 시 GetMesh(), 일반 Actor 상속 시 컴포넌트 찾아야 됨)
+	if (StaticMeshComp && UnitDataAsset->UnitStaticMesh)
+	{
+		StaticMeshComp->SetStaticMesh((UnitDataAsset->UnitStaticMesh));
+		
+		// 여기서 스케일이나 머티리얼 추가 조정 가능
+	}
 }
 
 void ABattleEnemyUnit::Die()

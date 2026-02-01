@@ -2,8 +2,8 @@
 
 
 #include "WorldEnemyUnit.h"
-#include "GlobalDataInstance.h"
-#include "SpawnDataAseet.h"
+#include "BattleInfoTransferSubsystem.h"
+#include "SpawnDataAsset.h"
 #include "UnitDataAsset.h"
 #include "WorldAllyUnit.h"
 #include "Components/SphereComponent.h"
@@ -75,47 +75,48 @@ void AWorldEnemyUnit::OnEncounterOverlap(UPrimitiveComponent* OverlappedComponen
 
 void AWorldEnemyUnit::StartEncounter(AActor* PlayerActor)
 {
-	if (!SpawnData)
+	if (!SpawnData  || !UnitData)
 	{
-		UE_LOG(LogTemp, Error, TEXT("[%s] 에 SpawnData가 할당되지 않았습니다!"), *GetName());
+		UE_LOG(LogTemp, Error, TEXT("[%s] 데이터 에셋 할당 확인 필요!"), *GetName());
 		return;
 	}
 	
-	UGlobalDataInstance* GI = Cast<UGlobalDataInstance>(GetGameInstance());
+	// GameInstance에서 인스턴스 서브시스템 가져오기
+	UGameInstance* GI = GetGameInstance();
+	if (!GI)
+	{
+		return;
+	}
+	
+	UBattleInfoTransferSubsystem* BattleInfoSubsystem = GI->GetSubsystem<UBattleInfoTransferSubsystem>();
 	AWorldAllyUnit* PlayerUnit = Cast<AWorldAllyUnit>(PlayerActor);
 	
-	if (UnitData == nullptr)
+	if (BattleInfoSubsystem && PlayerUnit)
 	{
-		UE_LOG(LogTemp, Error, TEXT("Enemy [%s] has NO UnitData! 할당을 확인하세요."), *GetName());
-		return;
-	}
-	
-	if (GI && PlayerUnit)
-	{
-		UE_LOG(LogTemp, Error, TEXT("Encounter Started! Loading Battle Level..."));
+		UE_LOG(LogTemp, Log, TEXT("Encounter Started! Transferring data via Subsystem..."));
 		
-		//GI->BattleInfo.EnemyClasses = EncounterData->EnemyGroup;
+		// 기존 데이터 초기화 (이전 전투 정보 삭제)
+		BattleInfoSubsystem->InitBattleInfo();
 		
-		if (SpawnData->SpawnGroups.Num() >0)
+		// 인스턴스 서브시스템에 데이터 저장
+		if (SpawnData->SpawnGroups.Num() > 0)
 		{
-			GI->BattleInfo.EnemySpawnMap = SpawnData->SpawnGroups[0].SpawnMap;
+			// 인스턴스 서브시스템 내부에 정의된 BattleInfo 구조체 혹은 변수에 접근
+			BattleInfoSubsystem->BattleInfo.EnemiesToSpawn = SpawnData->SpawnGroups[0].EnemyList;
 		}
 		else
 		{
-			UE_LOG(LogTemp, Error, TEXT("[%s]의 SpawnGroups 배열이 비어있습니다!"), *SpawnData->GetName());
+			UE_LOG(LogTemp, Error, TEXT("[%s]의 SpawnGroups가 비어있습니다!"), *SpawnData->GetName());
 			return;
 		}
-		
-		// 플레이어 데이터와 Enemy 데이터를 GameInstance에 저장 (월드 복귀 데이터 저장)
-		// 아래 두 줄 사용 안할 수도? 확인 필요 *****
-		// GI->BattleInfo.EnemyClasses.Empty();
-		// GI->BattleInfo.EnemyClasses.Add(UnitData->BattleUnitClass);
-		GI->BattleInfo.SourceLevelName = FName(*GetWorld()->GetMapName());
-		GI->BattleInfo.ReturnLocation = PlayerActor->GetActorLocation();
-		GI->BattleInfo.ReturnRotation = PlayerActor->GetActorRotation();
-		
-		// 레벨 전환
-		UGameplayStatics::OpenLevel(this, FName("BattleLevel"));
 	}
+	
+	// 월드 복귀용 데이터 저장
+	BattleInfoSubsystem->BattleInfo.SourceLevelName = FName(*UGameplayStatics::GetCurrentLevelName(this));
+	BattleInfoSubsystem->BattleInfo.ReturnLocation = PlayerActor->GetActorLocation();
+	BattleInfoSubsystem->BattleInfo.ReturnRotation  = PlayerActor->GetActorRotation();
+	
+	// 레벨 전환
+	UGameplayStatics::OpenLevel(this, FName("BattleLevel"));
 }
 

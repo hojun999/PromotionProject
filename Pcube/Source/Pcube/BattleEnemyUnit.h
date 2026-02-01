@@ -6,9 +6,7 @@
 #include "BattleBaseUnit.h"
 #include "BattleEnemyUnit.generated.h"
 
-/**
- * 
- */
+class UUnitDataAsset;
 
 // 재화 드롭 정보를 담는 구조체
 USTRUCT(BlueprintType)
@@ -34,8 +32,15 @@ class PCUBE_API ABattleEnemyUnit : public ABattleBaseUnit
 public:
 	ABattleEnemyUnit();
 	
+	UFUNCTION(BlueprintCallable, Category="Battle")
+	void InitUnit(UUnitDataAsset* UnitDataAsset);
+	
 	UPROPERTY(EditAnywhere, Category="Drop")
 	TArray<FDropInfo> DropTable;
 	
 	virtual void Die() override;
+	
+protected:
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Visual")
+	UStaticMeshComponent* StaticMeshComp;
 };
