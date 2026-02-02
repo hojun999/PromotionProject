@@ -4,7 +4,6 @@
 #include "BattleControlSubsystem.h"
 #include "BattleInfoTransferSubsystem.h"
 #include "UnitDataAsset.h"
-#include "Kismet/GameplayStatics.h"
 
 void UBattleControlSubsystem::OnWorldBeginPlay(UWorld& InWorld)
 {
@@ -23,69 +22,77 @@ void UBattleControlSubsystem::SpawnBattleUnits()
 	UE_LOG(LogTemp, Error, TEXT("SpawnBattleUnits 정상 호출!"));
 	
 	UWorld* World = GetWorld();
-	if (!World)
-	{
-		return;
-	}
-	
-	UGameInstance* GI = World->GetGameInstance();
-	if (!GI)
-	{
-		return;
-	}
+	UGameInstance* GI = World ? World->GetGameInstance() : nullptr;
 	
 	// 1. BattleInfoTransferSubsystem에서 데이터 가져오기
-	UBattleInfoTransferSubsystem* BattleInfoSubsystem = GI->GetSubsystem<UBattleInfoTransferSubsystem>();
-	if (!BattleInfoSubsystem || BattleInfoSubsystem->BattleInfo.EnemiesToSpawn.Num() == 0)
+	UBattleInfoTransferSubsystem* BattleInfoSubsystem = GI ? GI->GetSubsystem<UBattleInfoTransferSubsystem>() : nullptr;
+	
+	// 2. 아군 유닛 스폰
+	if (BattleInfoSubsystem->BattleInfo.AlliesToSpawn.Num() == 0)
 	{
-		UE_LOG(LogTemp, Error, TEXT("스폰할 적 데이터가 없습니다!"));
-		return;
+		UE_LOG(LogTemp, Error, TEXT("아군 데이터가 비어있습니다!"));
 	}
 	
-	// 2. 적 유닛 스폰 루프
-	for (const FEnemySpawnInfo& SpawnInfo : BattleInfoSubsystem->BattleInfo.EnemiesToSpawn)
+	for (const FUnitSpawnInfo& AllyInfo : BattleInfoSubsystem->BattleInfo.AlliesToSpawn)
 	{
-		// 소프트 포인터 로드 (데이터 에셋 로드 확인)
-		UUnitDataAsset* UnitDataAsset = SpawnInfo.UnitDataAsset.LoadSynchronous();
-		
-		if (UnitDataAsset && UnitDataAsset->BattleUnitClass)
+		if (ABattleBaseUnit* NewAlly = SpawningLogic(AllyInfo))
 		{
-			FTransform SpawnTransform(
-				SpawnInfo.SpawnRotation,
-				SpawnInfo.SpawnLocation,
-				SpawnInfo.SpawnScale
-			);
-			
-			FActorSpawnParameters SpawnParams;
-			SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButAlwaysSpawn;
-			
-			// 실제 액터 스폰
-			AActor* NewEnemy = World->SpawnActor<AActor>(
-				UnitDataAsset->BattleUnitClass,
-				SpawnTransform,
-				SpawnParams
-			);
-			
-			if (NewEnemy)
-			{
-				ABattleEnemyUnit* EnemyUnit = Cast<ABattleEnemyUnit>(NewEnemy);
-				if (EnemyUnit)
-				{
-					// 데이터 에셋을 전달하여 메시와 애니메이션 할당
-					EnemyUnit->InitUnit(UnitDataAsset);
-					SpawnedEnemies.Add(EnemyUnit);
-				}
-				
-				//SpawnedEnemies.Add(NewEnemy);
-				UE_LOG(LogTemp, Log, TEXT("적 스폰 성공: %s"), *EnemyUnit->GetName());
-				
-				// TODO: 유닛에 스탯 주입 or 초기화 로직 작성 가능 (다른 클래스에서 로직을 불러올 수도 있을 듯?)
-				
-			}
+			// 필요하다면 아군 전용 로직 추가 가능 ---
+			SpawnedAllies.Add(NewAlly);
+			UE_LOG(LogTemp, Log, TEXT("아군 스폰 성공: %s"), *NewAlly->GetName());
+		}
+		else
+		{
+			UE_LOG(LogTemp, Log, TEXT("아군 스폰 실패! 아군 Unit Data Asset을 불러오지 못했습니다."));
 		}
 	}
 	
-	// 3. TODO: 플레이어 유닛들 스폰 로직?
+	// 3. 적 유닛 스폰
+	if (BattleInfoSubsystem->BattleInfo.EnemiesToSpawn.Num() == 0)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("전투에 생성할 적 데이터가 없습니다."));
+	}
 	
-	// 4. TODO: 스폰 완료 후 턴 매니저에 시작 알림
+	for (const FUnitSpawnInfo& EnemyInfo : BattleInfoSubsystem->BattleInfo.EnemiesToSpawn)
+	{
+		if (ABattleBaseUnit* NewEnemy = SpawningLogic(EnemyInfo))
+		{
+			// 필요하다면 적 전용 로직 추가 가능 ---
+			SpawnedEnemies.Add(NewEnemy);
+			UE_LOG(LogTemp, Log, TEXT("적 스폰 성공: %s"), *NewEnemy->GetName());
+		}
+	}
+	
+	// 4. TODO: 모든 유닛 스폰 완료 후 턴 매니저에 유닛 리스트 전달 및 전투 시작
+	// StartBattle();
+}
+
+ABattleBaseUnit* UBattleControlSubsystem::SpawningLogic(const FUnitSpawnInfo& UnitInfo)
+{
+	UWorld* World = GetWorld();
+	UUnitDataAsset* UnitDataAsset = UnitInfo.UnitDataAsset.LoadSynchronous();
+	
+	if (!UnitDataAsset || !UnitDataAsset->BattleUnitClass)
+	{
+		return nullptr;
+	}
+	
+	FTransform SpawnTransform(UnitInfo.SpawnRotation, UnitInfo.SpawnLocation, UnitInfo.SpawnScale);
+	FActorSpawnParameters SpawnParams;
+	SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButAlwaysSpawn;
+	
+	// battle 유닛들의 공통 부모인 ABattleBaseUnit으로 스폰 및 캐스팅
+	ABattleBaseUnit* NewUnit = World->SpawnActor<ABattleBaseUnit>(
+		UnitDataAsset->BattleUnitClass,
+		SpawnTransform,
+		SpawnParams
+		);
+	
+	if (NewUnit)
+	{
+		// 데이터 에셋 할당 및 초기화 (메시, 기본 스탯 등)
+		NewUnit->InitUnit(UnitDataAsset);
+	}
+	
+	return NewUnit;
 }

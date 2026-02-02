@@ -3,6 +3,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "SpawnDataAsset.h"
 #include "Subsystems/WorldSubsystem.h"
 #include "BattleControlSubsystem.generated.h"
 
@@ -28,4 +29,8 @@ protected:
 	// 현재 전투에 참여 중인 플레이어 유닛들을 담는 배열
 	UPROPERTY()
 	TArray<AActor*> SpawnedAllies;
+	
+private:
+	// 유닛 스폰의 공통적인 부분을 담당하는 함수
+	ABattleBaseUnit* SpawningLogic(const FUnitSpawnInfo& UnitInfo);
 };

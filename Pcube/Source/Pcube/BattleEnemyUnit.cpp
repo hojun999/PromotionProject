@@ -18,22 +18,6 @@ ABattleEnemyUnit::ABattleEnemyUnit()
 	}
 }
 
-void ABattleEnemyUnit::InitUnit(UUnitDataAsset* UnitDataAsset)
-{
-	if (!UnitDataAsset)
-	{
-		return;
-	}
-	
-	// 메시 설정 (Character 상속 시 GetMesh(), 일반 Actor 상속 시 컴포넌트 찾아야 됨)
-	if (StaticMeshComp && UnitDataAsset->UnitStaticMesh)
-	{
-		StaticMeshComp->SetStaticMesh((UnitDataAsset->UnitStaticMesh));
-		
-		// 여기서 스케일이나 머티리얼 추가 조정 가능
-	}
-}
-
 void ABattleEnemyUnit::Die()
 {
 	// DropTable 에 등록된 모든 재화에 대해 루프 실행

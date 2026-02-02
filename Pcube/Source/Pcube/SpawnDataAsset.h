@@ -9,7 +9,7 @@
 class UUnitDataAsset;
 
 USTRUCT(BlueprintType)
-struct FEnemySpawnInfo
+struct FUnitSpawnInfo
 {
 	GENERATED_BODY()
 	
@@ -64,7 +64,7 @@ struct FEnemySpawnGroup
 	
 	// 해당 그룹에 포함된 모든 적 유닛 리스트 (개체수 & 위치 정보)
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Spawn")
-	TArray<FEnemySpawnInfo> EnemyList;
+	TArray<FUnitSpawnInfo> EnemyList;
 };
 
 UCLASS()

@@ -22,14 +22,16 @@ public:
 	UUnitDataAsset* UnitData;
 	
 	// 스탯
-	UPROPERTY(BlueprintReadOnly, Category = "Stats")
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Stats")
 	float CurrentHP;
 	
-	UPROPERTY(BlueprintReadOnly, Category = "Stats")
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Stats")
 	float CurrentSpeed;
 	
-	UPROPERTY(BlueprintReadOnly, Category = "Stats")
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Stats")
 	float CurrentAttackPower;
+	
+	virtual void InitUnit(UUnitDataAsset* TransferredUnitData);
 	
 	// 턴 관리를 위한 행동 수치
 	UPROPERTY(BlueprintReadOnly)
@@ -57,11 +59,16 @@ protected:
 	// Called when the game starts or when spawned
 	virtual void BeginPlay() override;
 
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Visual")
+	UStaticMeshComponent* StaticMeshComp;
+	
 	// 마우스 클릭 시 호출되는 엔진 기본 이벤트
 	virtual void NotifyActorOnClicked(FKey ButtonPressed = EKeys::LeftMouseButton) override;
 	
 	// 선택 상태 관리 변수
 	UPROPERTY(BlueprintReadOnly, Category="Selection")
 	bool bIsSelected;
+	
+	
 
 };

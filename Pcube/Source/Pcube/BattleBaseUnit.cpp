@@ -18,12 +18,33 @@ void ABattleBaseUnit::BeginPlay()
 {
 	Super::BeginPlay();
 	
-	// 시작할 때 데이터 에셋으로부터 값 가져옴
-	if (UnitData)
+}
+
+// BattleContolSubsystem에서 유닛을 spanw시킨 직후 호출
+void ABattleBaseUnit::InitUnit(UUnitDataAsset* TransferredUnitData)
+{
+	if (!TransferredUnitData)
 	{
+		return;
+	}
+	
+	if (TransferredUnitData)
+	{
+		UnitData = TransferredUnitData;
+		
 		CurrentHP = UnitData->BaseStats.MaxHP;
 		CurrentSpeed = UnitData->BaseStats.Speed;
 		CurrentAttackPower = UnitData->BaseStats.AttackPower;
+		
+		UE_LOG(LogTemp, Log, TEXT("%s 유닛 데이터 전달 완료!"), *UnitData->UnitName);
+	}
+	
+	// 메시 설정 (Character 상속 시 GetMesh(), 일반 Actor 상속 시 컴포넌트 찾아야 됨)
+	if (StaticMeshComp && TransferredUnitData->UnitStaticMesh)
+	{
+		StaticMeshComp->SetStaticMesh((TransferredUnitData->UnitStaticMesh));
+		
+		// 여기서 스케일이나 머티리얼 추가 조정 가능
 	}
 }
 
