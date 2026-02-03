@@ -19,8 +19,6 @@ void UBattleControlSubsystem::OnWorldBeginPlay(UWorld& InWorld)
 
 void UBattleControlSubsystem::SpawnBattleUnits()
 {
-	UE_LOG(LogTemp, Error, TEXT("SpawnBattleUnits 정상 호출!"));
-	
 	UWorld* World = GetWorld();
 	UGameInstance* GI = World ? World->GetGameInstance() : nullptr;
 	

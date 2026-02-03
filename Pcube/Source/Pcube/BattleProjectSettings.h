@@ -12,7 +12,7 @@ class PCUBE_API UBattleProjectSettings : public UDeveloperSettings
 	GENERATED_BODY()
 	
 public:
-	UBattleProjectSettings();
+	//UBattleProjectSettings();
 	
 	UPROPERTY(Config, EditAnywhere, Category="Initial Data")
 	TSoftObjectPtr<class UAllyPartyDataAsset> DefaultAllyPartyAsset;

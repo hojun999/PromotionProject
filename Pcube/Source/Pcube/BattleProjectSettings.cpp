@@ -3,7 +3,7 @@
 
 #include "BattleProjectSettings.h"
 
-UBattleProjectSettings::UBattleProjectSettings()
-{
-	
-}
+// UBattleProjectSettings::UBattleProjectSettings()
+// {
+// 	
+// }

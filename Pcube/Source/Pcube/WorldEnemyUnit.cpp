@@ -95,14 +95,12 @@ void AWorldEnemyUnit::StartEncounter(AActor* PlayerActor)
 	{
 		UE_LOG(LogTemp, Log, TEXT("Encounter Started! Transferring data via Subsystem..."));
 		
-		// 기존 데이터 초기화 (이전 전투 정보 삭제)
-		BattleInfoSubsystem->InitBattleInfo();
-		
 		// 인스턴스 서브시스템에 데이터 저장
 		if (SpawnData->SpawnGroups.Num() > 0)
 		{
-			// 인스턴스 서브시스템 내부에 정의된 BattleInfo 구조체 혹은 변수에 접근
-			BattleInfoSubsystem->BattleInfo.EnemiesToSpawn = SpawnData->SpawnGroups[0].EnemyList;
+			// 이전 전투 정보 삭제 & 새로운 적 스폰 정보 갱신
+			BattleInfoSubsystem->InitEnemyBattleInfo(SpawnData->SpawnGroups[0].EnemyList);
+			//BattleInfoSubsystem->BattleInfo.EnemiesToSpawn = SpawnData->SpawnGroups[0].EnemyList;
 		}
 		else
 		{

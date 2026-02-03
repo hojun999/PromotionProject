@@ -30,8 +30,6 @@ class PCUBE_API ABattleEnemyUnit : public ABattleBaseUnit
 	GENERATED_BODY()
 	
 public:
-	ABattleEnemyUnit();
-	
 	UPROPERTY(EditAnywhere, Category="Drop")
 	TArray<FDropInfo> DropTable;
 	

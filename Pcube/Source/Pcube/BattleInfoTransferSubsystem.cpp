@@ -4,6 +4,12 @@
 #include "BattleInfoTransferSubsystem.h"
 #include "BattleProjectSettings.h"
 
+void UBattleInfoTransferSubsystem::InitEnemyBattleInfo(const TArray<FUnitSpawnInfo>& NewSpawnEnemies)
+{
+	BattleInfo.EnemiesToSpawn.Empty();
+	BattleInfo.EnemiesToSpawn = NewSpawnEnemies;
+}
+
 void UBattleInfoTransferSubsystem::Initialize(FSubsystemCollectionBase& Collection)
 {
 	Super::Initialize(Collection);
@@ -11,6 +17,8 @@ void UBattleInfoTransferSubsystem::Initialize(FSubsystemCollectionBase& Collecti
 	const UBattleProjectSettings* Settings = GetDefault<UBattleProjectSettings>();
 	if (Settings && !Settings->DefaultAllyPartyAsset.IsNull())
 	{
+		UE_LOG(LogTemp, Error, TEXT("기본 아군 파티 데이터 에셋 로드 성공!"));
+		
 		UAllyPartyDataAsset* AllyPartyData = Settings->DefaultAllyPartyAsset.LoadSynchronous();
 		InitializeDefaultAllyParty(AllyPartyData);
 	}
@@ -24,24 +32,16 @@ void UBattleInfoTransferSubsystem::InitializeDefaultAllyParty(UAllyPartyDataAsse
 	BattleInfo.AlliesToSpawn.Empty();
     
 	// 데이터 에셋에 등록된 멤버들을 FUnitSpawnInfo 구조체로 변환
-	for (int32 i = 0; i < DefaultAllyPartyData->DefaultMembers.Num(); ++i)
+	for (const FUnitSpawnInfo& MemberInfo : DefaultAllyPartyData->DefaultPartyMembers)
 	{
-		UUnitDataAsset* MemberAsset = DefaultAllyPartyData->DefaultMembers[i];
-		if (!MemberAsset) continue;
+		if (MemberInfo.UnitDataAsset.IsNull())
+		{
+			continue;
+		}
 
-		FUnitSpawnInfo NewAlly;
-		NewAlly.UnitDataAsset = MemberAsset;
-		NewAlly.UnitID = MemberAsset->UnitName; // 또는 에셋 내부에 정의된 고유 ID
-        
-		// 초기 배치 좌표 설정 (예: 아군 진영 좌측)
-		NewAlly.SpawnLocation = FVector(-500.f, i * 200.f, 100.f);
-		NewAlly.SpawnRotation = FRotator(0.f, 0.f, 0.f);
-		NewAlly.SpawnScale = FVector(1.f);
-
-		BattleInfo.AlliesToSpawn.Add(NewAlly);
+		// 에디터에서 설정한 데이터 에셋의 정보가 그대로 전달됨
+		BattleInfo.AlliesToSpawn.Add(MemberInfo);
 	}
-    
-	UE_LOG(LogTemp, Warning, TEXT("아군 파티 %d명 준비 완료!"), BattleInfo.AlliesToSpawn.Num());
 }
 
 // TODO: 저장할 데이터가 많아지는 경우, SaveGameManagerSubsystem을 따로 만들어서 저장/로드 로직 분리 필요

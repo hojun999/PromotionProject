@@ -9,8 +9,15 @@
 // Sets default values
 ABattleBaseUnit::ABattleBaseUnit()
 {
-	// tick 사용 x
-	PrimaryActorTick.bCanEverTick = false;
+	StaticMeshComp = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("StaticMeshComp"));
+	StaticMeshComp->SetupAttachment(RootComponent);
+	
+	// ACharacter를 상속받으므로 깁본 skeletalmesh 숨기기
+	// TODO: 이후에 Skeletalmesh 사용할 때 아래 내용 삭제
+	if (GetMesh())
+	{
+		GetMesh()->SetHiddenInGame(true);
+	}
 }
 
 // Called when the game starts or when spawned

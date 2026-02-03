@@ -3,7 +3,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
-#include "UnitDataAsset.h"
+#include "SpawnDataAsset.h"
 #include "Engine/DataAsset.h"
 #include "AllyPartyDataAsset.generated.h"
 
@@ -16,5 +16,5 @@ class PCUBE_API UAllyPartyDataAsset : public UPrimaryDataAsset
 public:
 	// 초기 파티에 포함될 유닛들
 	UPROPERTY(EditAnywhere, Category="Battle")
-	TArray<UUnitDataAsset*> DefaultMembers;
+	TArray<FUnitSpawnInfo> DefaultPartyMembers;
 };

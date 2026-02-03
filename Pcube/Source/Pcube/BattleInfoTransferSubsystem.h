@@ -58,12 +58,12 @@ public:
 	// UFUNCTION(BlueprintCallable, Category="Save|Load")
 	// void LoadGameProgress();
 	
-	UUnitDataAsset* FindUnitDataAssetByID(FString ID);
+	//UUnitDataAsset* FindUnitDataAssetByID(FString ID);
 	
 	// 현재 활성화된 데이터 정보 - WorldEnemyUnit으로부터 전달됨
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Battle")
 	FBattleInfoStruct BattleInfo;
 	
 	// 데이터 초기화를 위한 함수
-	void InitBattleInfo() { BattleInfo = FBattleInfoStruct(); }
+	void InitEnemyBattleInfo(const TArray<FUnitSpawnInfo>& NewSpawnEnemies);
 };
