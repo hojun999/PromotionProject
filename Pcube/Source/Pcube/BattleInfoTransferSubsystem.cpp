@@ -17,8 +17,6 @@ void UBattleInfoTransferSubsystem::Initialize(FSubsystemCollectionBase& Collecti
 	const UBattleProjectSettings* Settings = GetDefault<UBattleProjectSettings>();
 	if (Settings && !Settings->DefaultAllyPartyAsset.IsNull())
 	{
-		UE_LOG(LogTemp, Error, TEXT("기본 아군 파티 데이터 에셋 로드 성공!"));
-		
 		UAllyPartyDataAsset* AllyPartyData = Settings->DefaultAllyPartyAsset.LoadSynchronous();
 		InitializeDefaultAllyParty(AllyPartyData);
 	}
@@ -36,10 +34,12 @@ void UBattleInfoTransferSubsystem::InitializeDefaultAllyParty(UAllyPartyDataAsse
 	{
 		if (MemberInfo.UnitDataAsset.IsNull())
 		{
+			UE_LOG(LogTemp, Error, TEXT("기본 아군 파티 데이터 에셋의 멤버가 비어있음! *****"));
 			continue;
 		}
 
 		// 에디터에서 설정한 데이터 에셋의 정보가 그대로 전달됨
+		UE_LOG(LogTemp, Error, TEXT("기본 아군 파티 데이터 에셋 로드 성공!"));
 		BattleInfo.AlliesToSpawn.Add(MemberInfo);
 	}
 }
