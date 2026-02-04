@@ -19,6 +19,8 @@ void UBattleInfoTransferSubsystem::Initialize(FSubsystemCollectionBase& Collecti
 	{
 		if (!Settings->DefaultAllyPartyAsset.IsNull())
 		{
+			UE_LOG(LogTemp, Log, TEXT("로드 시도 경로: %s"), *Settings->DefaultAllyPartyAsset.ToString());
+			
 			UAllyPartyDataAsset* AllyPartyData = Settings->DefaultAllyPartyAsset.LoadSynchronous();
 			if (AllyPartyData)
 			{
@@ -26,22 +28,18 @@ void UBattleInfoTransferSubsystem::Initialize(FSubsystemCollectionBase& Collecti
 			}
 			else
 			{
-				UE_LOG(LogTemp, Error, TEXT("BattleSubsystem: 데이터 에셋 로드 실패! (패키징 설정 확인 필요)"));
+				UE_LOG(LogTemp, Error, TEXT("BattleSubsystem: 데이터 에셋 로드 실패! 경로: %s"), *Settings->DefaultAllyPartyAsset.ToSoftObjectPath().ToString());
 			}
 		}
+		else
+		{
+			UE_LOG(LogTemp, Warning, TEXT("BattleSubsystem: 설정에 등록된 에셋이 Null입니다."));
+		}
 	}
-	
-	
-	// if (Settings && !Settings->DefaultAllyPartyAsset.IsNull())
-	// {
-	// 	UAllyPartyDataAsset* AllyPartyData = Settings->DefaultAllyPartyAsset.LoadSynchronous();
-	// 	InitializeDefaultAllyParty(AllyPartyData);
-	// }
 }
 
 void UBattleInfoTransferSubsystem::InitializeDefaultAllyParty(UAllyPartyDataAsset* DefaultAllyPartyData)
 {
-	// TODO: 아래 내용들은 복붙한 것들. 수정 필요
 	if (!DefaultAllyPartyData) return;
 
 	BattleInfo.AlliesToSpawn.Empty();
