@@ -55,6 +55,17 @@ void ABattleBaseUnit::InitUnit(UUnitDataAsset* TransferredUnitData)
 	}
 }
 
+void ABattleBaseUnit::FinishAction()
+{
+	UE_LOG(LogTemp, Log, TEXT("%s 유닛 행동 종료!"), *GetName());
+	
+	// 신호 발송 - 구독하고 있는 모든 곳에 알림
+	if (OnActionFinished.IsBound())
+	{
+		OnActionFinished.Broadcast();
+	}
+}
+
 void ABattleBaseUnit::BasicAttack(ABattleBaseUnit* Target)
 {
 	if (Target && CurrentAttackPower > 0)

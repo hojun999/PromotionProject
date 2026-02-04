@@ -2,6 +2,8 @@
 
 
 #include "BattleControlSubsystem.h"
+
+#include "BattleAllyUnit.h"
 #include "BattleInfoTransferSubsystem.h"
 #include "UnitDataAsset.h"
 
@@ -90,7 +92,159 @@ ABattleBaseUnit* UBattleControlSubsystem::SpawningLogic(const FUnitSpawnInfo& Un
 	{
 		// 데이터 에셋 할당 및 초기화 (메시, 기본 스탯 등)
 		NewUnit->InitUnit(UnitDataAsset);
+		
+		// 구독 신청
+		// 유닛의 OnActionFinished가 사용되면 BattleControlSubsystem에서 OnUnitActionComplete 함수 실행
+		NewUnit->OnActionFinished.AddDynamic(this, &UBattleControlSubsystem::OnUnitActionComplete);
 	}
 	
 	return NewUnit;
+}
+
+void UBattleControlSubsystem::SetState(EBattleState NewState)
+{
+	// 해당 내용 있으면 갱신이 안되는 부분 있는지 확인되면 지우기 ***
+	if (CurrentState == NewState)
+	{
+		return;
+	}
+	
+	CurrentState = NewState;
+
+	if (OnBattleStateChanged.IsBound())
+	{
+		OnBattleStateChanged.Broadcast(CurrentState);
+	}
+	
+	switch (CurrentState)
+	{
+	case EBattleState::NewRound:
+		HandleNewRound(); break;
+	case EBattleState::WaitTurn:
+		HandleWaitTurn(); break;
+	case EBattleState::ActionInput:
+		HandleActionInput(); break;
+	case EBattleState::ActionExecute:
+		/* 애니메이션 대기 */ break;
+	case EBattleState::CheckCondition:
+		HandleCheckCondition(); break;
+	case EBattleState::Finished:
+		UE_LOG(LogTemp, Log, TEXT("전투가 완전히 종료되었습니다.")); break;
+	}
+}
+
+void UBattleControlSubsystem::HandleNewRound()
+{
+	TArray<AActor*> AllParticipants;
+	AllParticipants.Append(SpawnedAllies);
+	AllParticipants.Append(SpawnedEnemies);
+	
+	// 주사위 Roll & Sort
+	TurnManager->InitNewRound(AllParticipants);
+	
+	if (OnTurnOrderUpdated.IsBound())
+	{
+		OnTurnOrderUpdated.Broadcast(AllParticipants);
+	}
+	
+	SetState(EBattleState::WaitTurn);
+}
+
+void UBattleControlSubsystem::HandleWaitTurn()
+{
+	// 라운드 종료 여부 확인
+	if (TurnManager->IsRoundFinished())
+	{
+		SetState(EBattleState::NewRound);
+		return;
+	}
+	
+	CurrentActionUnit = TurnManager->GetNextUnit();
+	
+	if (CurrentActionUnit)
+	{
+		SetState(EBattleState::ActionInput);
+	}
+}
+
+void UBattleControlSubsystem::HandleActionInput()
+{
+	// TurnManager로부터 결정된 현재 유닛을 캐스팅
+	ABattleBaseUnit* ActiveUnit = Cast<ABattleBaseUnit>(CurrentActionUnit);
+	if (ActiveUnit)
+	{
+		// UI에 현재 누구의 턴인지 알림
+		if (OnTurnUnitChanged.IsBound())
+		{
+			OnTurnUnitChanged.Broadcast(ActiveUnit);
+		}
+		
+		if (ActiveUnit->IsA<ABattleAllyUnit>()) // 플레이어 유닛인 경우
+		{
+			// UI를 띄우고 플레이어 입력 대기
+			UE_LOG(LogTemp, Log, TEXT("플레이어 입력 대기 중... (UI 활성화)"));
+		}
+		else // 적 유닛인 경우
+		{
+			// 적 AI 유닛 로직 실행 -> 애니메이션 재생 -> 애니메이션 종료 시 Notify 호출
+			// 유닛이 행동을 마치면 OnActionFinished.Broadcast()를 호출하게 함
+		}
+	}
+}
+
+void UBattleControlSubsystem::HandleCheckCondition()
+{
+	// 살아있는 유닛 수 확인
+	int32 AliveAllies = GetAliveUnitCount(SpawnedAllies);
+	int32 AliveEnemies = GetAliveUnitCount(SpawnedEnemies);
+	
+	UE_LOG(LogTemp, Log, TEXT("생존 확인 - 아군: %d, 적군: %d"), AliveAllies, AliveEnemies);
+	
+	// 승리 판정: 적이 모두 쓰러졌을 때
+	if (AliveAllies <= 0)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("전투 승리!"));
+		SetState(EBattleState::Finished);
+		// TODO: 승리 UI 출력 및 보상 획득 로직(World의 적 유닛 사체로 변경) 연결
+		return;
+	}
+	
+	// 패배 판정: 아군이 모두 쓰러졌을 때
+	if (AliveAllies <= 0)
+	{
+		UE_LOG(LogTemp, Error, TEXT("전투 패배..."));
+		SetState(EBattleState::Finished);
+		// TODO: 게임 오버 UI 출력 또는 메인 메뉴 레벨로 이동
+		return;
+	}
+	
+	// 전투 지속: 결과가 나지 않은 경우 다음 유닛의 턴 대기
+	UE_LOG(LogTemp, Log, TEXT("전투 지속 - 다음 유닛을 결정합니다."));
+	SetState(EBattleState::WaitTurn);
+}
+
+void UBattleControlSubsystem::OnUnitActionComplete()
+{
+	UE_LOG(LogTemp, Warning, TEXT("서브시스템: 유닛의 행동 종료 신호를 수신했습니다. 다음 턴으로 넘어갑니다."));
+	
+	// 한 유닛의 행동이 끝난 후 승패를 확인하고 다음 턴 진행
+	SetState(EBattleState::CheckCondition);
+}
+
+int32 UBattleControlSubsystem::GetAliveUnitCount(const TArray<AActor*>& UnitList)
+{
+	int32 count = 0;
+	
+	for (AActor* Actor : UnitList)
+	{
+		ABattleBaseUnit* Unit = Cast<ABattleBaseUnit>(Actor);
+		
+		// 유닛이 유효하고, HP > 0 인지 확인
+		// TODO: IsDead()와 같은 함수 추가
+		if (IsValid(Unit) && Unit->CurrentHP > 0.0f)
+		{
+			count++;
+		}
+	}
+	return count;
 }

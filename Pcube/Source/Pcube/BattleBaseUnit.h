@@ -9,6 +9,8 @@
 class UUnitDataAsset;
 class USkillDataAsset;
 
+DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnActionFinished);
+
 UCLASS()
 class PCUBE_API ABattleBaseUnit : public ACharacter
 {
@@ -18,8 +20,15 @@ public:
 	// Sets default values for this pawn's properties
 	ABattleBaseUnit();
 
+	// 유닛의 데이터 에셋 초기화를 담당하는 함수
+	virtual void InitUnit(UUnitDataAsset* TransferredUnitData);
+	
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Data")
 	UUnitDataAsset* UnitData;
+	
+	// 스킬 목록 (아군/적 개수 제한 없이 데이터로 관리)
+	UPROPERTY(EditAnywhere, Category = "Skills")
+	TArray<USkillDataAsset*> Skills;
 	
 	// 스탯
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Stats")
@@ -31,17 +40,14 @@ public:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Stats")
 	float CurrentAttackPower;
 	
-	virtual void InitUnit(UUnitDataAsset* TransferredUnitData);
-	
-	// 턴 관리를 위한 행동 수치
-	UPROPERTY(BlueprintReadOnly)
-	float CurrentActionValue;
-	
-	// 스킬 목록 (아군/적 개수 제한 없이 데이터로 관리)
-	UPROPERTY(EditAnywhere, Category = "Skills")
-	TArray<USkillDataAsset*> Skills;
+	// 델리게이트 인스턴스 변수 생성
+	UPROPERTY(BlueprintAssignable, Category="Battle")
+	FOnActionFinished OnActionFinished;
 	
 	// --- 전투 핵심 로직
+	// 행동 종료 시 호출할 함수
+	void FinishAction();
+	
 	// 언리얼 기본 데미지 함수
 	virtual float TakeDamage(float DamageAmount, struct FDamageEvent const& DamageEvent, class AController* EventInstigator, AActor* DamageCauser) override;
 	

@@ -64,24 +64,9 @@ bool UBattleTurnManager::IsRoundFinished() const
 
 float UBattleTurnManager::GetUnitSpeed(AActor* UnitActor) const
 {
-	// TODO: 각 유닛의 UnitDataAsset에서 BaseSpeed 값을 가져오는 로직 작성
-	if (!UnitActor)
+	if (ABattleBaseUnit* BaseUnit = Cast<ABattleBaseUnit>(UnitActor))
 	{
-		return 0.0f;
+		return BaseUnit->CurrentSpeed;
 	}
-	
-	// 1. 적 유닛인지 확인
-	if (ABattleEnemyUnit* Enemy = Cast<ABattleEnemyUnit>(UnitActor))
-	{
-		// 유닛에 할당되어 있는 DataAsset에서 스피드 값 가져오기
-		return Enemy->CurrentSpeed;
-	}
-	
-	// 2. 아군 유닛인지 확인
-	if (ABattleAllyUnit* Ally = Cast<ABattleAllyUnit>(UnitActor))
-	{
-		return Ally->CurrentSpeed;
-	}
-	
 	return 0.0f;
 }
