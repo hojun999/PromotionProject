@@ -50,7 +50,7 @@ public:
 	FOnTurnUnitChanged OnTurnUnitChanged;
 	
 	UPROPERTY(BlueprintAssignable, Category="Battle|UI")
-	FOnTurnOrderUpdated OnTurnOrderUpdated;
+	FOnTurnOrderUpdated OnTurnOrderChanged;
 	
 	// 유닛들을 스폰하는 함수
 	void SpawnBattleUnits();
@@ -65,8 +65,13 @@ public:
 	void OnUnitActionComplete();
 	
 protected:
+	void OnBattleSetupFinished();
+	
 	EBattleState CurrentState;
+	
+	UPROPERTY()
 	UBattleTurnManager* TurnManager;
+	
 	AActor* CurrentActionUnit;
 	
 	// 현재 전투에 참여 중인 적 유닛들을 담는 배열 (턴 관리용)

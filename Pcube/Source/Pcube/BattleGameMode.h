@@ -29,6 +29,7 @@ public:
 	// 현재 전투 상태
 	// UPROPERTY(BlueprintReadOnly, Category="Battle")
 	// EBattleState CurrentState;
+	ABattleGameMode();
 	
 	UPROPERTY(EditAnywhere, Category="Battle")
 	TSubclassOf<AActor> BattleManager;

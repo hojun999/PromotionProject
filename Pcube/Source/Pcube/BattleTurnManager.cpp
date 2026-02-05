@@ -70,3 +70,16 @@ float UBattleTurnManager::GetUnitSpeed(AActor* UnitActor) const
 	}
 	return 0.0f;
 }
+
+TArray<AActor*> UBattleTurnManager::GetSortedActorList() const
+{
+	TArray<AActor*> SortedActors;
+	for (const FBattleTurnUnit& TurnData : RoundArray)
+	{
+		if (IsValid(TurnData.UnitActor))
+		{
+			SortedActors.Add(TurnData.UnitActor);
+		}
+	}
+	return SortedActors;
+}

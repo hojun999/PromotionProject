@@ -40,9 +40,14 @@ public:
 	UFUNCTION(BlueprintCallable, Category="Battle|Turn")
 	bool IsRoundFinished() const;
 	
+	// 정렬된 유닛들의 순서 반환
+	UFUNCTION(BlueprintCallable, Category="Battle|Turn")
+	TArray<AActor*> GetSortedActorList() const;
+	
 	// 현재 라운드 진행 인덱스
 	UPROPERTY(BlueprintReadOnly, Category="Battle|Turn")
 	int32 CurrentRound = 0;
+	
 	
 	
 private:

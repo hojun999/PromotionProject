@@ -58,7 +58,7 @@ public:
 	
 	// 전투용 정보 (전투 레벨에서 소환할 블루프린트 클래스)
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Battle")
-	TSubclassOf<ABattleBaseUnit> BattleUnitClass; // 260203: ABattleEnemyUnit->ABattleBaseUnit으로 바꿈. 문제 생길 경우 수정
+	TSubclassOf<ABattleBaseUnit> BattleUnitClass;
 	
 	// 기본 스탯
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Stats")

@@ -11,11 +11,20 @@ void UBattleControlSubsystem::OnWorldBeginPlay(UWorld& InWorld)
 {
 	Super::OnWorldBeginPlay(InWorld);
 	
+	// BattleTurnManager 생성
+	if (TurnManager == nullptr)
+	{
+		TurnManager = NewObject<UBattleTurnManager>(this);
+		UE_LOG(LogTemp, Log, TEXT("BattleControlSubsystem: TurnManager Created"));
+	}
+	
 	// 현재 레벨이 BattleLevel인지 확인 - 다른 월드에서 오작동 방지
 	FString CurrentLevelName = InWorld.GetMapName();
 	if (CurrentLevelName.Contains("BattleLevel"))
 	{
-		SpawnBattleUnits();
+		// 즉시 실행 대신 타이머를 사용해 아주 잠깐 늦게 시작 (HUD가 바인딩할 시간을 줌)
+		FTimerHandle TempHandle;
+		InWorld.GetTimerManager().SetTimer(TempHandle, this, &UBattleControlSubsystem::SpawnBattleUnits, 0.1f, false);
 	}
 }
 
@@ -63,6 +72,7 @@ void UBattleControlSubsystem::SpawnBattleUnits()
 		}
 	}
 	
+	SetState(EBattleState::NewRound);
 	// 4. TODO: 모든 유닛 스폰 완료 후 턴 매니저에 유닛 리스트 전달 및 전투 시작
 	// StartBattle();
 }
@@ -101,6 +111,17 @@ ABattleBaseUnit* UBattleControlSubsystem::SpawningLogic(const FUnitSpawnInfo& Un
 	return NewUnit;
 }
 
+void UBattleControlSubsystem::OnBattleSetupFinished()
+{
+	// 스폰이 완료되었으므로 BattleInfoTransferSubsystem의 데이터 비워주기 - 이전 레벨에 의한 메모리 누수 방지
+	if (UBattleInfoTransferSubsystem* TransferSub = GetWorld()->GetGameInstance()->GetSubsystem<UBattleInfoTransferSubsystem>())
+	{
+		TransferSub->BattleInfo.AlliesToSpawn.Empty();
+		TransferSub->BattleInfo.EnemiesToSpawn.Empty();
+		UE_LOG(LogTemp, Log, TEXT("Battle Data Cleared to prevent Memory Leak"));
+	}
+}
+
 void UBattleControlSubsystem::SetState(EBattleState NewState)
 {
 	// 해당 내용 있으면 갱신이 안되는 부분 있는지 확인되면 지우기 ***
@@ -135,6 +156,12 @@ void UBattleControlSubsystem::SetState(EBattleState NewState)
 
 void UBattleControlSubsystem::HandleNewRound()
 {
+	if (!TurnManager)
+	{
+		UE_LOG(LogTemp, Error, TEXT("BattleControlSubsystem: TurnManager is NULL in HandleNewRound!"));
+		return; 
+	}
+	
 	TArray<AActor*> AllParticipants;
 	AllParticipants.Append(SpawnedAllies);
 	AllParticipants.Append(SpawnedEnemies);
@@ -142,9 +169,12 @@ void UBattleControlSubsystem::HandleNewRound()
 	// 주사위 Roll & Sort
 	TurnManager->InitNewRound(AllParticipants);
 	
-	if (OnTurnOrderUpdated.IsBound())
+	TArray<AActor*> SortedList = TurnManager->GetSortedActorList();
+	
+	if (OnTurnOrderChanged.IsBound())
 	{
-		OnTurnOrderUpdated.Broadcast(AllParticipants);
+		OnTurnOrderChanged.Broadcast(AllParticipants);
+		UE_LOG(LogTemp, Log, TEXT("BattleSubsystem: Turn Order Broadcasted (%d units)"), SortedList.Num());
 	}
 	
 	SetState(EBattleState::WaitTurn);
@@ -152,6 +182,12 @@ void UBattleControlSubsystem::HandleNewRound()
 
 void UBattleControlSubsystem::HandleWaitTurn()
 {
+	if (!TurnManager)
+	{
+		UE_LOG(LogTemp, Error, TEXT("BattleControlSubsystem: TurnManager is NULL in HandleWaitTurn!"));
+		return; 
+	}
+	
 	// 라운드 종료 여부 확인
 	if (TurnManager->IsRoundFinished())
 	{
@@ -169,6 +205,12 @@ void UBattleControlSubsystem::HandleWaitTurn()
 
 void UBattleControlSubsystem::HandleActionInput()
 {
+	if (!TurnManager)
+	{
+		UE_LOG(LogTemp, Error, TEXT("BattleControlSubsystem: TurnManager is NULL in HandleActionInput!"));
+		return; 
+	}
+	
 	// TurnManager로부터 결정된 현재 유닛을 캐스팅
 	ABattleBaseUnit* ActiveUnit = Cast<ABattleBaseUnit>(CurrentActionUnit);
 	if (ActiveUnit)
@@ -194,6 +236,12 @@ void UBattleControlSubsystem::HandleActionInput()
 
 void UBattleControlSubsystem::HandleCheckCondition()
 {
+	if (!TurnManager)
+	{
+		UE_LOG(LogTemp, Error, TEXT("BattleControlSubsystem: TurnManager is NULL in HandleCheckCondition!"));
+		return; 
+	}
+	
 	// 살아있는 유닛 수 확인
 	int32 AliveAllies = GetAliveUnitCount(SpawnedAllies);
 	int32 AliveEnemies = GetAliveUnitCount(SpawnedEnemies);

@@ -1,14 +1,14 @@
-// Fill out your copyright notice in the Description page of Project Settings.
+﻿// Fill out your copyright notice in the Description page of Project Settings.
 
 #pragma once
 
 #include "CoreMinimal.h"
 #include "Blueprint/UserWidget.h"
 #include "Components/Image.h"
-#include "BattleTurnOrderSlot.generated.h"
+#include "BattleActionOrderSlot.generated.h"
 	
 UCLASS()
-class PCUBE_API UBattleTurnOrderSlot : public UUserWidget
+class PCUBE_API UBattleActionOrderSlot : public UUserWidget
 {
 	GENERATED_BODY()
 	
@@ -19,5 +19,5 @@ public:
 protected:
 	// 블루프린트의 Image 위젯과 연결 - 이름 같아야됨 ***
 	UPROPERTY(meta=(BindWidget))
-	UImage* UnitPortrait;
+	UImage* UnitIcon;
 };
