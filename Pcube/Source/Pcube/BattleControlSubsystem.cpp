@@ -173,7 +173,7 @@ void UBattleControlSubsystem::HandleNewRound()
 	
 	if (OnTurnOrderChanged.IsBound())
 	{
-		OnTurnOrderChanged.Broadcast(AllParticipants);
+		OnTurnOrderChanged.Broadcast(SortedList);
 		UE_LOG(LogTemp, Log, TEXT("BattleSubsystem: Turn Order Broadcasted (%d units)"), SortedList.Num());
 	}
 	
