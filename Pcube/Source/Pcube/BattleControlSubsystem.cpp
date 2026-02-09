@@ -213,25 +213,26 @@ void UBattleControlSubsystem::HandleActionInput()
 	
 	// TurnManager로부터 결정된 현재 유닛을 캐스팅
 	ABattleBaseUnit* ActiveUnit = Cast<ABattleBaseUnit>(CurrentActionUnit);
-	if (ActiveUnit)
+	if (!ActiveUnit) return;
+	
+	
+	// UI에 현재 누구의 턴인지 알림
+	if (OnTurnUnitChanged.IsBound())
 	{
-		// UI에 현재 누구의 턴인지 알림
-		if (OnTurnUnitChanged.IsBound())
-		{
-			OnTurnUnitChanged.Broadcast(ActiveUnit);
-		}
-		
-		if (ActiveUnit->IsA<ABattleAllyUnit>()) // 플레이어 유닛인 경우
-		{
-			// UI를 띄우고 플레이어 입력 대기
-			UE_LOG(LogTemp, Log, TEXT("플레이어 입력 대기 중... (UI 활성화)"));
-		}
-		else // 적 유닛인 경우
-		{
-			// 적 AI 유닛 로직 실행 -> 애니메이션 재생 -> 애니메이션 종료 시 Notify 호출
-			// 유닛이 행동을 마치면 OnActionFinished.Broadcast()를 호출하게 함
-		}
+		OnTurnUnitChanged.Broadcast(ActiveUnit);
 	}
+		
+	if (ActiveUnit->IsA<ABattleAllyUnit>()) // 플레이어 유닛인 경우
+	{
+		// UI를 띄우고 플레이어 입력 대기
+		UE_LOG(LogTemp, Log, TEXT("플레이어 입력 대기 중... (UI 활성화)"));
+	}
+	else // 적 유닛인 경우
+	{
+		// 적 AI 유닛 로직 실행 -> 애니메이션 재생 -> 애니메이션 종료 시 Notify 호출
+		// 유닛이 행동을 마치면 OnActionFinished.Broadcast()를 호출하게 함
+	}
+	
 }
 
 void UBattleControlSubsystem::HandleCheckCondition()
@@ -277,6 +278,49 @@ void UBattleControlSubsystem::OnUnitActionComplete()
 	
 	// 한 유닛의 행동이 끝난 후 승패를 확인하고 다음 턴 진행
 	SetState(EBattleState::CheckCondition);
+}
+
+void UBattleControlSubsystem::HandleEnemyAI(ABattleBaseUnit* EnemyUnit)
+{
+	if (!EnemyUnit || !EnemyUnit->UnitData) return;
+	
+	const TArray<USkillDataAsset*>& Skills = EnemyUnit->UnitData->SkillList;
+	if (Skills.Num() == 0) return;
+	
+	// 1. 가중치 총합 계산
+	float TotalWeight = 0.f;
+	// for (auto* Skill : Skills) TotalWeight += Skill->SelectionWeight; // 스킬 에셋에 있는 가중치
+	
+	// 2. 가중치 기반 랜덤 선택
+	float RandomValue = FMath::FRandRange(0.f, TotalWeight);
+	USkillDataAsset* SelectedSkill = nullptr;
+	float CurrentWeightSum = 0.f;
+	
+	for (auto* Skill : Skills)
+	{
+		// CurrentWeightSum += Skill->SelectionWeight;
+		if (RandomValue <= CurrentWeightSum)
+		{
+			SelectedSkill = Skill;
+			break;
+		}
+	}
+	
+	// 3. 타겟 결정 (살아있는 아군 중 랜덤)
+	if (SpawnedAllies.Num() > 0)
+	{
+		int32 RandomIndex = FMath::RandRange(0, SpawnedAllies.Num() - 1);
+		AActor* Target = SpawnedAllies[RandomIndex];
+		
+		// 4. 행동 실행 상태로 전환 (딜레이를 주어 카메라 연출 시간 확보)
+		FTimerHandle ActionTimer;
+		GetWorld()->GetTimerManager().SetTimer(ActionTimer, [this, EnemyUnit, SelectedSkill, Target]()
+		{
+			// 실제 유닛에게 스킬 실행 명령을 내리고 상태를 Execute로 변경
+			// EnemyUnit->ExecuteSkill(SelectedSkill, Target);
+			SetState(EBattleState::ActionExecute);
+		}, 1.0f, false);
+	}
 }
 
 int32 UBattleControlSubsystem::GetAliveUnitCount(const TArray<AActor*>& UnitList)

@@ -63,9 +63,12 @@ public:
 	
 	UFUNCTION()
 	void OnUnitActionComplete();
+
 	
 protected:
 	void OnBattleSetupFinished();
+	
+	void HandleEnemyAI(ABattleBaseUnit* EnemyUnit);
 	
 	EBattleState CurrentState;
 	

@@ -5,7 +5,7 @@
 
 #include "Components/VerticalBox.h"
 
-void UBattleActionMenu::ShouMenu(ABattleAllyUnit* TargetUnit)
+void UBattleActionMenu::ShowMenu(ABattleAllyUnit* TargetUnit)
 {
 	CurrentUnit = TargetUnit;
 	this->SetVisibility(ESlateVisibility::Visible);

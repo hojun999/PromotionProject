@@ -17,7 +17,7 @@ class PCUBE_API UBattleActionMenu : public UUserWidget
 	
 public:
 	// HUD에서 호출 - 메뉴 초기화 및 표시
-	void ShouMenu(ABattleAllyUnit* TargetUnit);
+	void ShowMenu(ABattleAllyUnit* TargetUnit);
 	
 protected:
 	// --- 메인 버튼 ---

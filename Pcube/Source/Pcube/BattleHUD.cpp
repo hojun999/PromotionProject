@@ -101,6 +101,24 @@ void ABattleHUD::HandleTurnUnitChanged(ABattleBaseUnit* ActiveUnit)
 	// 아군 턴일 때만 스킬창 활성화 로직을 HUD가 직접 제어
 	bool bIsAlly = ActiveUnit->IsA<ABattleAllyUnit>();
 	BattleActionMenuWidget->SetVisibility(bIsAlly ? ESlateVisibility::Visible : ESlateVisibility::Collapsed);
+	
+	if (ABattleAllyUnit* AllyUnit = Cast<ABattleAllyUnit>(ActiveUnit))
+	{
+		// 1. 카메라 줌인 (시네마틱 카메라 전환)
+		APlayerController* PC = GetOwningPlayerController();
+		// AllyUnit 내부의 CineCameraComponent로 0.8초간 부드럽게 전환
+		PC->SetViewTargetWithBlend(AllyUnit, 0.8f, VTBlend_Cubic);
+		
+		if (BattleActionMenuWidget)
+		{
+			BattleActionMenuWidget->ShowMenu(AllyUnit);
+		}
+	}
+	else // 적군 턴일 때 (필요시 적군에게도 카메라 포커스 가능)
+	{
+		
+		if (BattleActionMenuWidget) BattleActionMenuWidget->SetVisibility(ESlateVisibility::Collapsed);
+	}
 }
 
 void ABattleHUD::HandleActionOrderChanged(const TArray<AActor*>& NewOrder)
