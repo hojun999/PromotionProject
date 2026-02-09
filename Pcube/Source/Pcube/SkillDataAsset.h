@@ -15,10 +15,13 @@ class PCUBE_API USkillDataAsset : public UDataAsset
 	GENERATED_BODY()
 
 public:
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Skill Info")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Battle|Skill")
 	FString SkillName;
 	
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Skill Info")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Battle|Skill")
+	UTexture2D* SkillImage;
+	
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Battle|Skill")
 	float DamageMultiplier;
 	
 	

@@ -114,3 +114,15 @@ void ABattleBaseUnit::OnTurnStarted()
 {
 	
 }
+
+int32 ABattleBaseUnit::GetSkillNumber()
+{
+	int32 res = 0;
+	
+	for (int i = 0; i < Skills.Num(); i++)
+	{
+		res++;
+	}
+	
+	return res;
+}

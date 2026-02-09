@@ -61,6 +61,9 @@ public:
 	// TODO: 특정 스킬 사용 후, 몇 턴 동안 매 턴 시작마다 발동하는 스킬 추가
 	virtual void OnTurnStarted();
 	
+	// 유닛의 보유 스킬 개수를 구하는 함수
+	int32 GetSkillNumber();
+	
 protected:
 	// Called when the game starts or when spawned
 	virtual void BeginPlay() override;

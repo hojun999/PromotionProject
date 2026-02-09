@@ -8,6 +8,7 @@
 
 class ABattleAllyUnit;
 class UButton;
+class UVerticalBox;
 
 UCLASS()
 class PCUBE_API UBattleActionMenu : public UUserWidget
@@ -31,11 +32,11 @@ protected:
 	
 	// --- 하위 패널 (하위 위젯들) --- 	
 	UPROPERTY(meta = (BindWidget))
-	UUserWidget* SkillListWidget;
+	UVerticalBox* SkillListWidget;
 	// class USkillListWidget* SkillListWidget;
 	
 	UPROPERTY(meta = (BindWidget))
-	UUserWidget* ItemListWidget;
+	UVerticalBox* ItemListWidget;
 	// class UItemListWidget* ItemListWidget;
 	
 	// 공격은 바로 적 지정 및 실행

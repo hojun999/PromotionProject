@@ -3,6 +3,8 @@
 
 #include "BattleActionMenu.h"
 
+#include "Components/VerticalBox.h"
+
 void UBattleActionMenu::ShouMenu(ABattleAllyUnit* TargetUnit)
 {
 	CurrentUnit = TargetUnit;

@@ -6,6 +6,7 @@
 #include "BaseHUD.h"
 #include "BattleControlSubsystem.h"
 #include "BattleActionOrderWidget.h"
+#include "BattleActionMenu.h"
 #include "BattleHUD.generated.h"
 
 class ABattleBaseUnit;
@@ -26,7 +27,7 @@ protected:
 	TSubclassOf<UUserWidget> ActionOrderClass;
 	
 	UPROPERTY(EditAnywhere, Category="Battle|UI")
-	TSubclassOf<UUserWidget> SkillPanelClass;
+	TSubclassOf<UUserWidget> ActionMenuClass;
 	
 	UPROPERTY(EditAnywhere, Category="Battle|UI")
 	TSubclassOf<UUserWidget> BattleStateNoticeClass;
@@ -39,7 +40,7 @@ protected:
 	UBattleActionOrderWidget* ActionOrderWidget;
 	
 	UPROPERTY()
-	UUserWidget* SkillPanelWidget;
+	UBattleActionMenu* BattleActionMenuWidget;
 	
 	UPROPERTY()
 	UUserWidget* BattleStateNoticeWidget;

@@ -48,11 +48,11 @@ void ABattleHUD::CreateAllWidgets()
 	}
 	
 	// 스킬 패널 생성
-	if (SkillPanelClass)
+	if (ActionMenuClass)
 	{
-		SkillPanelWidget = CreateWidget<UUserWidget>(PC, SkillPanelClass);
-		SkillPanelWidget->AddToViewport();
-		SkillPanelWidget->SetVisibility(ESlateVisibility::Collapsed);
+		BattleActionMenuWidget = CreateWidget<UBattleActionMenu>(PC, ActionMenuClass);
+		BattleActionMenuWidget->AddToViewport();
+		BattleActionMenuWidget->SetVisibility(ESlateVisibility::Collapsed);
 	}
 	
 	// 전투 진행에 따른 텍스트 출력 위젯 생성
@@ -88,19 +88,19 @@ void ABattleHUD::HandleBattleStateChanged(EBattleState NewState)
 	// 전투 상태 공지 위젯 텍스트 업데이트
 	
 	// 연출 중 UI 상호작용 제어
-	if (NewState == EBattleState::ActionExecute && SkillPanelWidget)
+	if (NewState == EBattleState::ActionExecute && BattleActionMenuWidget)
 	{
-		SkillPanelWidget->SetVisibility(ESlateVisibility::HitTestInvisible);
+		BattleActionMenuWidget->SetVisibility(ESlateVisibility::HitTestInvisible);
 	}
 }
 
 void ABattleHUD::HandleTurnUnitChanged(ABattleBaseUnit* ActiveUnit)
 {
-	if (!SkillPanelWidget || !ActiveUnit) return;
+	if (!BattleActionMenuWidget || !ActiveUnit) return;
 	
 	// 아군 턴일 때만 스킬창 활성화 로직을 HUD가 직접 제어
 	bool bIsAlly = ActiveUnit->IsA<ABattleAllyUnit>();
-	SkillPanelWidget->SetVisibility(bIsAlly ? ESlateVisibility::Visible : ESlateVisibility::Collapsed);
+	BattleActionMenuWidget->SetVisibility(bIsAlly ? ESlateVisibility::Visible : ESlateVisibility::Collapsed);
 }
 
 void ABattleHUD::HandleActionOrderChanged(const TArray<AActor*>& NewOrder)

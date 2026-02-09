@@ -30,3 +30,8 @@ void UBattleActionOrderWidget::RefreshList(const TArray<AActor*>& NewOrder)
 	}
 	UE_LOG(LogTemp, Log, TEXT("Widget: VerticalBox Refreshed with %d slots."), NewOrder.Num());
 }
+
+void UBattleActionOrderWidget::ExceptDeadUnitOnList(const AActor* DeadUnit)
+{
+	// TODO: 죽은 유닛을 찾아서 verticalbox의 컴포넌트에서 제외
+}
