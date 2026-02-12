@@ -4,6 +4,7 @@
 
 #include "CoreMinimal.h"
 #include "Blueprint/UserWidget.h"
+#include "BattleAllyUnit.h"
 #include "BattleActionMenu.generated.h"
 
 class ABattleAllyUnit;

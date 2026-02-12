@@ -4,6 +4,8 @@
 
 #include "CoreMinimal.h"
 #include "GameFramework/Character.h"
+#include "CineCameraComponent.h"
+#include "GameFramework/SpringArmComponent.h"
 #include "BattleBaseUnit.generated.h"
 
 class UUnitDataAsset;
@@ -70,6 +72,12 @@ protected:
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Visual")
 	UStaticMeshComponent* StaticMeshComp;
+	
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Camera")
+	USpringArmComponent* CineCameraArmComp;
+	
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Camera")
+	UCineCameraComponent* CineCameraComp;
 	
 	// 마우스 클릭 시 호출되는 엔진 기본 이벤트
 	virtual void NotifyActorOnClicked(FKey ButtonPressed = EKeys::LeftMouseButton) override;

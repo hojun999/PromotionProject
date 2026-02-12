@@ -18,6 +18,17 @@ ABattleBaseUnit::ABattleBaseUnit()
 	{
 		GetMesh()->SetHiddenInGame(true);
 	}
+	
+	CineCameraArmComp = CreateDefaultSubobject<USpringArmComponent>(TEXT("CineCameraArmComp"));
+	CineCameraArmComp->SetupAttachment(RootComponent);
+	CineCameraArmComp->TargetArmLength = 800.0f;
+	CineCameraArmComp->SetRelativeRotation(FRotator(-30.0f, 45.0f, 0.0f));
+	CineCameraArmComp->bDoCollisionTest = false;
+	CineCameraArmComp->bUsePawnControlRotation = false;
+	
+	CineCameraComp = CreateDefaultSubobject<UCineCameraComponent>(TEXT("CineCameraComp"));
+	CineCameraComp->SetupAttachment(CineCameraArmComp, USpringArmComponent::SocketName);
+	CineCameraComp->CurrentFocalLength = 50.0f;
 }
 
 // Called when the game starts or when spawned
