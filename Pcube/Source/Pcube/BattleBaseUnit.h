@@ -114,4 +114,6 @@ private:
 	UPROPERTY()
 	class USkillDataAsset* CurrentSkillData; // 현재 사용 중인 스킬 데이터
 
+	UPROPERTY()
+	bool bDamageAppliedThisAction = false;
 };

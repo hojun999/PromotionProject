@@ -136,6 +136,8 @@ private:
 	
 	int32 GetAliveUnitCount(const TArray<AActor*>& UnitList);
 	
+	void RebuildAvilableEnemyTargets();
+	
 	UPROPERTY()
 	TArray<AActor*> AvailableTargets;
 	

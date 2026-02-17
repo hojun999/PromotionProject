@@ -83,44 +83,77 @@ void ABattleBaseUnit::FinishAction()
 
 void ABattleBaseUnit::BasicAttack(ABattleBaseUnit* Target)
 {
-	if (Target && CurrentAttackPower > 0)
+	if (!Target || CurrentAttackPower <= 0.f) return;
+	
+	const float Damage = FMath::Max(1.f, CurrentAttackPower);
+	
+	UE_LOG(LogTemp, Warning, TEXT("[BasicAttack] %s -> %s : %0.1f"),
+		*GetName(), *Target->GetName(), Damage);
+	
+	if (GEngine)
 	{
-		// 언리얼 표준 데미지 전달 함수
-		UGameplayStatics::ApplyDamage(Target, CurrentAttackPower, GetController(), this, UDamageType::StaticClass());
+		GEngine->AddOnScreenDebugMessage(-1, 1.5f, FColor::Yellow,
+			FString::Printf(TEXT("[BasicAttack] %s -> %s : %0.1f"), *GetName(), *Target->GetName(), Damage));
 	}
+	
+	UGameplayStatics::ApplyDamage(Target, Damage, GetController(), this, UDamageType::StaticClass());
 }
 
 void ABattleBaseUnit::ExecuteAction(USkillDataAsset* SkillData, AActor* Target)
 {
-	if (!SkillData || !Target) return;
+	// Target이 유효하지 않은 경우 return 하지 않고 FinishAction으로 턴 마무리
+	if (!IsValid(Target))
+	{
+		UE_LOG(LogTemp, Warning, TEXT("[Action] Target is invalid -> FinishAction"));
+		FinishAction();
+		return;
+	}
+	
+	// 스킬이 없으면(데이터 누락) 프로토타입에서는 기본공격으로 처리하고 턴 종료
+	if (!SkillData)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("[Action] SkillData is null -> BasicAttack fallback"));
+		if (ABattleBaseUnit* TargetUnit = Cast<ABattleBaseUnit>(Target))
+		{
+			BasicAttack(TargetUnit);
+		}
+		FinishAction();
+		return;
+	}
 	
 	CurrentSkillData = SkillData;
 	CurrentActionTarget = Target;
+	bDamageAppliedThisAction = false;
 	
 	// 애니메이션 몽타주 재생
 	UAnimInstance* AnimInstance = GetMesh() ? GetMesh()->GetAnimInstance() : nullptr;
 	
-	// 몽타주 / Anim 인스턴스 없으면 최소 구현으로 즉시 종료 - 턴 진행 방지
+	// 1. 몽타주 / Anim 인스턴스 없으면 최소 구현으로 즉시 종료 - 턴 진행 방지
 	if (!AnimInstance || !SkillData->ActionMontage)
 	{
 		UE_LOG(LogTemp, Warning, TEXT("ExecuteAction: No AnimInstance or Montage. Finishing action immediately."));
+		ApplyCurrentSkillDamage();
+		bDamageAppliedThisAction = true;
 		FinishAction();
 		return;
 	}
 	
-	// 몽타주 기반 실행
+	// 2. Notify 바인딩
 	AnimInstance->OnPlayMontageNotifyBegin.RemoveDynamic(this, &ABattleBaseUnit::HandleHitNotify);	// 기존 바인딩 해제
 	AnimInstance->OnPlayMontageNotifyBegin.AddDynamic(this, &ABattleBaseUnit::HandleHitNotify);		// 바인딩 할당
 	
+	// 3. 몽타주 재생
 	const float PlayResult = AnimInstance->Montage_Play(SkillData->ActionMontage);
 	if (PlayResult <= 0.f)
 	{
 		UE_LOG(LogTemp, Warning, TEXT("ExecuteAction: Montage_Play failed. Finishing action immediately."));
+		ApplyCurrentSkillDamage();
+		bDamageAppliedThisAction = true;
 		FinishAction();
 		return;
 	}
 	
-	// 몽타주 종료 시점에 FinishAction() 호출 연결
+	// 4. 몽타주 종료 시점에 FinishAction() 호출 연결
 	FOnMontageEnded EndDelegate;
 	EndDelegate.BindUObject(this, &ABattleBaseUnit::OnActionMontageEnded);
 	AnimInstance->Montage_SetEndDelegate(EndDelegate, SkillData->ActionMontage);
@@ -129,10 +162,12 @@ void ABattleBaseUnit::ExecuteAction(USkillDataAsset* SkillData, AActor* Target)
 void ABattleBaseUnit::HandleHitNotify(FName NotifyName, const FBranchingPointNotifyPayload& Payload)
 {
 	// 몽타주에서 설정한 노티파이 이름이 "Hit"인 경우에만 로직 실행
-	if (NotifyName == FName("Hit"))
+	// *** 대미지 중복 처리 방지를 위해 bool 변수 사용
+	if (NotifyName == FName("Hit") && !bDamageAppliedThisAction)
 	{
 		UE_LOG(LogTemp, Log, TEXT("타격 발생! 데미지를 입힙니다."));
 		ApplyCurrentSkillDamage();
+		bDamageAppliedThisAction = true;
 	}
 }
 
@@ -166,6 +201,14 @@ void ABattleBaseUnit::OnActionMontageEnded(UAnimMontage* Montage, bool bInterrup
 	if (UAnimInstance* AnimInstance = GetMesh() ? GetMesh()->GetAnimInstance() : nullptr)
 	{
 		AnimInstance->OnPlayMontageNotifyBegin.RemoveDynamic(this, &ABattleBaseUnit::HandleHitNotify);
+	}
+	
+	// Hit 노티파이가 전달되지 않았으면 여기서 1회 대미지 처리
+	if (!bDamageAppliedThisAction)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("[Action] No Hit notify -> ApplyDamage at montage end"));
+		ApplyCurrentSkillDamage();
+		bDamageAppliedThisAction = true;
 	}
 	
 	FinishAction();
