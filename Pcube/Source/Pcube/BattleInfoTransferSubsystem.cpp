@@ -56,4 +56,83 @@ void UBattleInfoTransferSubsystem::InitializeDefaultAllyParty(UAllyPartyDataAsse
 	}
 }
 
-// TODO: 저장할 데이터가 많아지는 경우, SaveGameManagerSubsystem을 따로 만들어서 저장/로드 로직 분리 필요
+void UBattleInfoTransferSubsystem::SetPendingEncounter(FName EncounterID, FName ReturnWorldLevel)
+{
+	PendingEncounter.EncounterID = EncounterID;
+	PendingEncounter.ReturnWorldLevel = ReturnWorldLevel;
+	
+	UE_LOG(LogTemp, Warning, TEXT("[Encounter] Pending set: %s return=%s"),
+		*EncounterID.ToString(), *ReturnWorldLevel.ToString());
+}
+
+void UBattleInfoTransferSubsystem::SetReturnPoint(FName SourceWorldLevel, const FVector& Loc, const FRotator& Rot)
+{
+	BattleInfo.SourceLevelName = SourceWorldLevel;
+	BattleInfo.ReturnLocation = Loc;
+	BattleInfo.ReturnRotation = Rot;
+	BattleInfo.bHasReturnPoint = true;
+	
+	UE_LOG(LogTemp, Log, TEXT("[ReturnPoint] Set: level=%s loc=%s rot=%s"),
+		*SourceWorldLevel.ToString(),
+		*Loc.ToString(),
+		*Rot.ToString());
+}
+
+bool UBattleInfoTransferSubsystem::ConsumeReturnPoint(FVector& OutLoc, FRotator& OutRot)
+{
+	if (!BattleInfo.bHasReturnPoint)
+	{
+		return false;
+	}
+	
+	OutLoc = BattleInfo.ReturnLocation;
+	OutRot = BattleInfo.ReturnRotation;
+	BattleInfo.bHasReturnPoint = false;
+	
+	UE_LOG(LogTemp, Log, TEXT("[ReturnPoint] Consumed: loc=%s rot=%s"),
+		*OutLoc.ToString(),
+		*OutRot.ToString());
+	
+	return true;
+}
+
+void UBattleInfoTransferSubsystem::ClearReturnPoint()
+{
+	BattleInfo.bHasReturnPoint = false;
+	BattleInfo.ReturnLocation = FVector::ZeroVector;
+	BattleInfo.ReturnRotation = FRotator::ZeroRotator;
+}
+
+FName UBattleInfoTransferSubsystem::GetReturnWorldLevelName() const
+{
+	// PendingEncounter가 있으면 우선
+	if (PendingEncounter.ReturnWorldLevel != NAME_None)
+	{
+		return PendingEncounter.ReturnWorldLevel;
+	}
+	
+	// 없는 경우 BattleInfo.SourceLevelName으로 fallback
+	return BattleInfo.SourceLevelName;
+}
+
+void UBattleInfoTransferSubsystem::ClearPendingEncounter()
+{
+	PendingEncounter.EncounterID = NAME_None;
+	PendingEncounter.ReturnWorldLevel = NAME_None;
+}
+
+void UBattleInfoTransferSubsystem::MarkLastEncounterDefeated()
+{
+	if (PendingEncounter.EncounterID != NAME_None)
+	{
+		DefeatedEncounterIds.Add(PendingEncounter.EncounterID);
+		
+		UE_LOG(LogTemp, Warning, TEXT("[Encounter] Defeated recorded: %s"),
+			*PendingEncounter.EncounterID.ToString());
+	}
+}
+
+bool UBattleInfoTransferSubsystem::IsEncounterDefeated(FName EncounterID) const
+{
+	return DefeatedEncounterIds.Contains(EncounterID);
+}

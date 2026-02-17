@@ -24,6 +24,8 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Battle|Skill")
 	float DamageMultiplier;
 	
+	UPROPERTY(EditAnywhere, Category="Battle|Skill")
+	class UAnimMontage* ActionMontage;
 	
 	// 스킬 속성, 애니메이션, 사용 행동력 등 정의
 };

@@ -60,7 +60,7 @@ struct FEnemySpawnGroup
 		
 	// json 파싱용 encounter 고유 ID
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Spawn")
-	FString EncounterID;
+	FName EncounterID;
 	
 	// 해당 그룹에 포함된 모든 적 유닛 리스트 (개체수 & 위치 정보)
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Spawn")

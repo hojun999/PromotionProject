@@ -2,6 +2,7 @@
 
 
 #include "BattleActionMenu.h"
+#include "Blueprint/WidgetLayoutLibrary.h"
 #include "Components/VerticalBox.h"
 
 void UBattleActionMenu::ShowMenu(ABattleAllyUnit* TargetUnit)
@@ -9,44 +10,59 @@ void UBattleActionMenu::ShowMenu(ABattleAllyUnit* TargetUnit)
 	if (!TargetUnit) return;
 	CurrentUnit = TargetUnit;
 	
-	// 1. 유닛의 오른쪽 공간 좌표 계산 (World Space)
-	// 유닛 위치에서 오른쪽 방향으로 100 유닛, 위로 50 유닛 오프셋
-	FVector WorldLocation = CurrentUnit->GetActorLocation() 
-							+ (CurrentUnit->GetActorRightVector() * 200.f) 
-							+ (CurrentUnit->GetActorUpVector() * 1.f);
+	UpdateMenuPosition();
 	
-	// 2. 월드 좌표를 화면 2D 좌표로 투영 (Project)
+	// 카메라가 이동하는 동안 매 프레임 위치 갱신
+	bIsFollowingUnit = true;
+	SetVisibility(ESlateVisibility::Visible);
+	
+	// 서브 메뉴들은 일단 숨김
+	SkillListWidget->SetVisibility(ESlateVisibility::Collapsed);
+	ItemListWidget->SetVisibility(ESlateVisibility::Collapsed);
+}
+
+void UBattleActionMenu::UpdateMenuPosition()
+{
+	if (!CurrentUnit || !CurrentUnit->UIAnchorPoint) return;
+	
 	APlayerController* PC = GetOwningPlayer();
+	if (!PC) return;
+	
 	FVector2D ScreenPosition;
-    
-	if (PC && PC->ProjectWorldLocationToScreen(WorldLocation, ScreenPosition))
+	FVector WorldLocation = CurrentUnit->UIAnchorPoint->GetComponentLocation();
+	
+	// 컴포넌트의 월드 좌표를 가져와서 투영
+	if (UWidgetLayoutLibrary::ProjectWorldLocationToWidgetPosition(PC, WorldLocation, ScreenPosition, true))
 	{
-		// 3. 위젯 위치 고정 및 가시성 ON
 		SetPositionInViewport(ScreenPosition);
-		SetVisibility(ESlateVisibility::Visible);
-        
-		// 4. 메뉴 초기화 (메인 버튼 페이지 보여주기)
-		//if (MenuSwitcher) MenuSwitcher->SetActiveWidgetIndex(0);
-		
-		// 서브 메뉴들은 일단 숨김
-		SkillListWidget->SetVisibility(ESlateVisibility::Collapsed);
-		ItemListWidget->SetVisibility(ESlateVisibility::Collapsed);
 	}
 	
+}
+
+void UBattleActionMenu::NativeTick(const FGeometry& MyGeometry, float InDeltaTime)
+{
+	Super::NativeTick(MyGeometry, InDeltaTime);
 	
+	if (bIsFollowingUnit)
+	{
+		UpdateMenuPosition();
+	}
 }
 
 void UBattleActionMenu::OnAttackClicked()
 {
 	
+	UE_LOG(LogTemp, Warning, TEXT("[ActionMenu] Attack clicked."));
+	
+	OnActionRequested.Broadcast(BasicAttackData);
 }
 
 void UBattleActionMenu::OnSkillMenuClicked()
 {
-	
+	OnSkillMenuRequested.Broadcast();
 }
 
-void UBattleActionMenu::OnItemMunuClicked()
+void UBattleActionMenu::OnItemMenuClicked()
 {
-	
+	OnItemMenuRequested.Broadcast();
 }

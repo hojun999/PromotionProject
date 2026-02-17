@@ -36,6 +36,12 @@ void UBattleControlSubsystem::SpawnBattleUnits()
 	// 1. BattleInfoTransferSubsystem에서 데이터 가져오기
 	UBattleInfoTransferSubsystem* BattleInfoSubsystem = GI ? GI->GetSubsystem<UBattleInfoTransferSubsystem>() : nullptr;
 	
+	if (!BattleInfoSubsystem)
+	{
+		UE_LOG(LogTemp, Error, TEXT("BattleInfoTransferSubsystem is null"));
+		return;
+	}
+	
 	// 2. 아군 유닛 스폰
 	if (BattleInfoSubsystem->BattleInfo.AlliesToSpawn.Num() == 0)
 	{
@@ -72,9 +78,10 @@ void UBattleControlSubsystem::SpawnBattleUnits()
 		}
 	}
 	
+	// 적 유닛 스폰 정보 초기화
+	BattleInfoSubsystem->BattleInfo.EnemiesToSpawn.Empty();
+	
 	SetState(EBattleState::NewRound);
-	// 4. TODO: 모든 유닛 스폰 완료 후 턴 매니저에 유닛 리스트 전달 및 전투 시작
-	// StartBattle();
 }
 
 ABattleBaseUnit* UBattleControlSubsystem::SpawningLogic(const FUnitSpawnInfo& UnitInfo)
@@ -145,6 +152,8 @@ void UBattleControlSubsystem::SetState(EBattleState NewState)
 		HandleWaitTurn(); break;
 	case EBattleState::ActionInput:
 		HandleActionInput(); break;
+	case EBattleState::TargetSelection:
+		HandleTargetSelection(); break;
 	case EBattleState::ActionExecute:
 		/* 애니메이션 대기 */ break;
 	case EBattleState::CheckCondition:
@@ -152,6 +161,8 @@ void UBattleControlSubsystem::SetState(EBattleState NewState)
 	case EBattleState::Finished:
 		UE_LOG(LogTemp, Log, TEXT("전투가 완전히 종료되었습니다.")); break;
 	}
+	
+	UE_LOG(LogTemp, Warning, TEXT("Current State: %hhd"), CurrentState);
 }
 
 void UBattleControlSubsystem::HandleNewRound()
@@ -216,23 +227,150 @@ void UBattleControlSubsystem::HandleActionInput()
 	if (!ActiveUnit) return;
 	
 	
-	// UI에 현재 누구의 턴인지 알림
-	if (OnTurnUnitChanged.IsBound())
-	{
-		OnTurnUnitChanged.Broadcast(ActiveUnit);
-	}
+	// UI에 현재 턴 유닛 알림
+	OnTurnUnitChanged.Broadcast(ActiveUnit);
+	
 		
 	if (ActiveUnit->IsA<ABattleAllyUnit>()) // 플레이어 유닛인 경우
 	{
 		// UI를 띄우고 플레이어 입력 대기
-		UE_LOG(LogTemp, Log, TEXT("플레이어 입력 대기 중... (UI 활성화)"));
-	}
-	else // 적 유닛인 경우
-	{
-		// 적 AI 유닛 로직 실행 -> 애니메이션 재생 -> 애니메이션 종료 시 Notify 호출
-		// 유닛이 행동을 마치면 OnActionFinished.Broadcast()를 호출하게 함
+		UE_LOG(LogTemp, Log, TEXT("[BattleControlSubsystem] 플레이어 입력 대기 중... (UI 활성화)"));
+		return;
 	}
 	
+	// 적 유닛인 경우
+	// 적 AI 유닛 로직 실행 -> 애니메이션 재생 -> 애니메이션 종료 시 Notify 호출
+	// 유닛이 행동을 마치면 OnActionFinished.Broadcast()를 호출하게 함
+	
+	UE_LOG(LogTemp, Log, TEXT("[Turn] Enemy turn -> AI execute"));
+	HandleEnemyAI(ActiveUnit);
+}
+
+void UBattleControlSubsystem::UpdateSelectedTargetAndBroadcast()
+{
+	if (AvailableTargets.Num() <= 0)
+	{
+		SelectedTarget = nullptr;
+		CurrentTargetIndex = INDEX_NONE;
+		return;
+	}
+	
+	if (!AvailableTargets.IsValidIndex(CurrentTargetIndex))
+	{
+		CurrentTargetIndex = 0;
+	}
+	
+	SelectedTarget = AvailableTargets[CurrentTargetIndex];
+	
+	if (OnTargetChanged.IsBound() && IsValid(SelectedTarget))
+	{
+		OnTargetChanged.Broadcast(SelectedTarget);
+	}
+}
+
+
+void UBattleControlSubsystem::HandleTargetSelection()
+{
+	// 상태 진입 시점에 타겟 1회 Braodcast
+	// HUD/카메라가 여기서 반응
+	
+	UpdateSelectedTargetAndBroadcast();
+	
+	if (!IsValid(SelectedTarget))
+	{
+		UE_LOG(LogTemp, Warning, TEXT("TargetSelection: No valid target. Returning to ActionInput."));
+	}
+	
+}
+
+void UBattleControlSubsystem::MoveOnSelection(int32 Direction)
+{
+	if (CurrentState != EBattleState::TargetSelection)
+	{
+		return;
+	}
+	
+	if (AvailableTargets.Num() <= 0)
+	{
+		return;
+	}
+	
+	// Direction은 -1(이전), +1(이후)만 허용
+	Direction = (Direction < 0) ? -1 : (Direction > 0 ? 1 : 0);
+	if (Direction == 0) return;
+	
+	// 원형 이동
+	CurrentTargetIndex = (CurrentTargetIndex + Direction + AvailableTargets.Num()) % AvailableTargets.Num();
+	
+	UpdateSelectedTargetAndBroadcast();
+}
+
+void UBattleControlSubsystem::ConfirmTarget()
+{
+	if (CurrentState != EBattleState::TargetSelection)
+	{
+		return;
+	}
+	
+	if (!PendingSkill)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("ConfirmTarget: PendingSkill is null"));
+		CancelTargetSelection();
+		return;
+	}
+	
+	if (!IsValid(SelectedTarget))
+	{
+		UE_LOG(LogTemp, Warning, TEXT("ConfirmTarget: SelectedTarget invalid. Retrying selection."));
+		UpdateSelectedTargetAndBroadcast();
+		return;
+	}
+	
+	ABattleBaseUnit* Attacker = Cast<ABattleBaseUnit>(CurrentActionUnit);
+	if (!IsValid(Attacker))
+	{
+		UE_LOG(LogTemp, Error, TEXT("ConfirmTarget: CurrentActionUnit invalid"));
+		CancelTargetSelection();
+		SetState(EBattleState::WaitTurn);
+		return;
+	}
+	
+	SetState(EBattleState::ActionExecute);
+	
+	// 실제 실행
+	Attacker->ExecuteAction(PendingSkill, SelectedTarget);
+}
+
+void UBattleControlSubsystem::SelectTarget(AActor* NewTarget)
+{
+	if (CurrentState != EBattleState::TargetSelection) return;
+	
+	if (!IsValid(NewTarget)) return;
+	
+	// AvailableTargets 안에 있는 적만 사용
+	const int32 Index = AvailableTargets.IndexOfByKey(NewTarget);
+	if (Index == INDEX_NONE)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("SelectTarget: Clicked actor is not in AvailableTargets: %s"),
+			*NewTarget->GetName());
+		return;
+	}
+	
+	CurrentTargetIndex = Index;
+	SelectedTarget = NewTarget;
+	
+	UpdateSelectedTargetAndBroadcast();
+}
+
+void UBattleControlSubsystem::CancelTargetSelection()
+{
+	PendingSkill = nullptr;
+	AvailableTargets.Empty();
+	SelectedTarget = nullptr;
+	CurrentTargetIndex = INDEX_NONE;
+	
+	// 플레이어 입력 상태로 복귀
+	SetState(EBattleState::ActionInput);
 }
 
 void UBattleControlSubsystem::HandleCheckCondition()
@@ -244,16 +382,15 @@ void UBattleControlSubsystem::HandleCheckCondition()
 	}
 	
 	// 살아있는 유닛 수 확인
-	int32 AliveAllies = GetAliveUnitCount(SpawnedAllies);
-	int32 AliveEnemies = GetAliveUnitCount(SpawnedEnemies);
+	const int32 AliveAllies = GetAliveUnitCount(SpawnedAllies);
+	const int32 AliveEnemies = GetAliveUnitCount(SpawnedEnemies);
 	
 	UE_LOG(LogTemp, Log, TEXT("생존 확인 - 아군: %d, 적군: %d"), AliveAllies, AliveEnemies);
 	
 	// 승리 판정: 적이 모두 쓰러졌을 때
-	if (AliveAllies <= 0)
+	if (AliveEnemies <= 0)
 	{
-		UE_LOG(LogTemp, Warning, TEXT("전투 승리!"));
-		SetState(EBattleState::Finished);
+		FinishBattle(EBattleResult::Victory);
 		// TODO: 승리 UI 출력 및 보상 획득 로직(World의 적 유닛 사체로 변경) 연결
 		return;
 	}
@@ -261,8 +398,7 @@ void UBattleControlSubsystem::HandleCheckCondition()
 	// 패배 판정: 아군이 모두 쓰러졌을 때
 	if (AliveAllies <= 0)
 	{
-		UE_LOG(LogTemp, Error, TEXT("전투 패배..."));
-		SetState(EBattleState::Finished);
+		FinishBattle(EBattleResult::Defeat);
 		// TODO: 게임 오버 UI 출력 또는 메인 메뉴 레벨로 이동
 		return;
 	}
@@ -270,6 +406,19 @@ void UBattleControlSubsystem::HandleCheckCondition()
 	// 전투 지속: 결과가 나지 않은 경우 다음 유닛의 턴 대기
 	UE_LOG(LogTemp, Log, TEXT("전투 지속 - 다음 유닛을 결정합니다."));
 	SetState(EBattleState::WaitTurn);
+}
+
+void UBattleControlSubsystem::StartTargetSelection(USkillDataAsset* SelectedSkill)
+{
+	PendingSkill = SelectedSkill;
+	AvailableTargets = SpawnedEnemies; // 살아있는 적군 리스트 사용
+	
+	if (AvailableTargets.Num() > 0)
+	{
+		CurrentTargetIndex = 0;
+		SetState(EBattleState::TargetSelection);
+		OnTargetChanged.Broadcast(AvailableTargets[CurrentTargetIndex]);
+	}
 }
 
 void UBattleControlSubsystem::OnUnitActionComplete()
@@ -282,45 +431,37 @@ void UBattleControlSubsystem::OnUnitActionComplete()
 
 void UBattleControlSubsystem::HandleEnemyAI(ABattleBaseUnit* EnemyUnit)
 {
-	if (!EnemyUnit || !EnemyUnit->UnitData) return;
+	if (!EnemyUnit || EnemyUnit->IsDead() || !EnemyUnit->UnitData) return;
 	
-	const TArray<USkillDataAsset*>& Skills = EnemyUnit->UnitData->SkillList;
-	if (Skills.Num() == 0) return;
-	
-	// 1. 가중치 총합 계산
-	float TotalWeight = 0.f;
-	// for (auto* Skill : Skills) TotalWeight += Skill->SelectionWeight; // 스킬 에셋에 있는 가중치
-	
-	// 2. 가중치 기반 랜덤 선택
-	float RandomValue = FMath::FRandRange(0.f, TotalWeight);
-	USkillDataAsset* SelectedSkill = nullptr;
-	float CurrentWeightSum = 0.f;
-	
-	for (auto* Skill : Skills)
+	// 살아있는 아군 목록
+	TArray<AActor*> AliveAllies;
+	for (AActor* Actor : SpawnedAllies)
 	{
-		// CurrentWeightSum += Skill->SelectionWeight;
-		if (RandomValue <= CurrentWeightSum)
+		ABattleBaseUnit* Unit = Cast<ABattleBaseUnit>(Actor);
+		if (IsValid(Unit) && !Unit->IsDead())
 		{
-			SelectedSkill = Skill;
-			break;
+			AliveAllies.Add(Unit);
 		}
 	}
+	if (AliveAllies.Num() == 0) return;
 	
-	// 3. 타겟 결정 (살아있는 아군 중 랜덤)
-	if (SpawnedAllies.Num() > 0)
+	USkillDataAsset* Skill = nullptr;
+	if (EnemyUnit->UnitData->SkillList.Num() > 0)
 	{
-		int32 RandomIndex = FMath::RandRange(0, SpawnedAllies.Num() - 1);
-		AActor* Target = SpawnedAllies[RandomIndex];
-		
-		// 4. 행동 실행 상태로 전환 (딜레이를 주어 카메라 연출 시간 확보)
-		FTimerHandle ActionTimer;
-		GetWorld()->GetTimerManager().SetTimer(ActionTimer, [this, EnemyUnit, SelectedSkill, Target]()
-		{
-			// 실제 유닛에게 스킬 실행 명령을 내리고 상태를 Execute로 변경
-			// EnemyUnit->ExecuteSkill(SelectedSkill, Target);
-			SetState(EBattleState::ActionExecute);
-		}, 1.0f, false);
+		Skill = EnemyUnit->UnitData->SkillList[FMath::RandRange(0, EnemyUnit->UnitData->SkillList.Num() - 1)];
 	}
+	
+	AActor* Target = AliveAllies[FMath::RandRange(0, AliveAllies.Num() - 1)];
+	
+	UE_LOG(LogTemp, Warning, TEXT("[EnemyAI] %s uses %s on %s"),
+		*EnemyUnit->GetName(), *GetNameSafe(Skill), *Target->GetName());
+	
+	// 시네마틱 카메라 포커스: TargetChanged 브로드캐스트로 PC가 처리하게 구현
+	// OnTargetChange.Broadcast(Target)
+	// 이때, 사용할 시네마틱 카메라 시점은 아군/적군 공격 시 사용할 DefaultCinematicCamera의 시점
+	
+	SetState(EBattleState::ActionExecute);
+	EnemyUnit->ExecuteAction(Skill, Target);
 }
 
 int32 UBattleControlSubsystem::GetAliveUnitCount(const TArray<AActor*>& UnitList)
@@ -339,4 +480,17 @@ int32 UBattleControlSubsystem::GetAliveUnitCount(const TArray<AActor*>& UnitList
 		}
 	}
 	return count;
+}
+
+void UBattleControlSubsystem::FinishBattle(EBattleResult Result)
+{
+	FinalResult = Result;
+	SetState(EBattleState::Finished);
+	
+	UE_LOG(LogTemp, Warning, TEXT("[BattleFinished] Result=%d"), (int32)Result);
+	
+	if (OnBattleFinished.IsBound())
+	{
+		OnBattleFinished.Broadcast(Result);
+	}
 }

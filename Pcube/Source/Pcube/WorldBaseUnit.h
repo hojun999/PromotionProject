@@ -16,20 +16,16 @@ class PCUBE_API AWorldBaseUnit : public ACharacter
 public:
 	// Sets default values for this character's properties
 	AWorldBaseUnit();
-
+	
+	UFUNCTION(BlueprintCallable)
+	virtual void InitFromUnitData(UUnitDataAsset* InUnitData);
+	
 protected:
-	// Called when the game starts or when spawned
-	virtual void BeginPlay() override;
-
 	// 유닛의 정보를 담은 데이터 에셋 (월드 - 전투 연결을 위함)
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Data")
-	UUnitDataAsset* UnitData;
+	UPROPERTY(BlueprintReadOnly)
+	TObjectPtr<UUnitDataAsset> UnitData = nullptr;
 	
 public:	
-	// Called every frame
-	virtual void Tick(float DeltaTime) override;
-
-	// Called to bind functionality to input
-	virtual void SetupPlayerInputComponent(class UInputComponent* PlayerInputComponent) override;
+	
 
 };

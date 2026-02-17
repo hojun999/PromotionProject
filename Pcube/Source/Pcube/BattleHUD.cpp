@@ -4,6 +4,7 @@
 #include "BattleHUD.h"
 #include "BattleAllyUnit.h"
 #include "BattleBaseUnit.h"
+#include "BattlePlayerController.h"
 #include "Blueprint/UserWidget.h"
 
 // 유닛 스폰이 끝난 후, "Battle Start" 텍스트 출력
@@ -27,6 +28,16 @@ void ABattleHUD::BeginPlay()
 	
 	CreateAllWidgets();
 	BindSubsystemEvents();
+	
+	if (ABattlePlayerController* BPC = Cast<ABattlePlayerController>(GetOwningPlayerController()))
+	{
+		UE_LOG(LogTemp, Warning, TEXT("[HUD] NotifyBattleHUDReady -> PC"));
+		BPC->NotifyBattleHUDReady(this);
+	}
+	else
+	{
+		UE_LOG(LogTemp, Error, TEXT("[HUD] OwningPlayerController is not ABattlePlayerController"));
+	}
 }
 
 void ABattleHUD::CreateAllWidgets()
@@ -61,6 +72,20 @@ void ABattleHUD::CreateAllWidgets()
 		BattleStateNoticeWidget = CreateWidget<UUserWidget>(PC, BattleStateNoticeClass);
 		BattleStateNoticeWidget->AddToViewport();
 	}
+	
+	if (GameOverWidgetClass)
+	{
+		GameOverWidget = CreateWidget<UUserWidget>(PC, GameOverWidgetClass);
+		GameOverWidget->AddToViewport(50);
+		GameOverWidget->SetVisibility(ESlateVisibility::Collapsed);
+	}
+	
+	if (VictoryWidgetClass)
+	{
+		VictoryWidget = CreateWidget<UUserWidget>(PC, VictoryWidgetClass);
+		VictoryWidget->AddToViewport(50);
+		VictoryWidget->SetVisibility(ESlateVisibility::Collapsed);
+	}
 }
 
 
@@ -73,6 +98,7 @@ void ABattleHUD::BindSubsystemEvents()
 			BattleContorlSub->OnBattleStateChanged.AddDynamic(this, &ABattleHUD::HandleBattleStateChanged);
 			BattleContorlSub->OnTurnUnitChanged.AddDynamic(this, &ABattleHUD::HandleTurnUnitChanged);
 			BattleContorlSub->OnTurnOrderChanged.AddDynamic(this, &ABattleHUD::HandleActionOrderChanged);
+			BattleContorlSub->OnTargetChanged.AddDynamic(this, &ABattleHUD::HandleTargetChanged);
 			
 			UE_LOG(LogTemp, Warning, TEXT("BattleHUD: OnTurnOrderChanged Bound Successfully!"));
 		}
@@ -85,13 +111,7 @@ void ABattleHUD::BindSubsystemEvents()
 
 void ABattleHUD::HandleBattleStateChanged(EBattleState NewState)
 {
-	// 전투 상태 공지 위젯 텍스트 업데이트
-	
-	// 연출 중 UI 상호작용 제어
-	if (NewState == EBattleState::ActionExecute && BattleActionMenuWidget)
-	{
-		BattleActionMenuWidget->SetVisibility(ESlateVisibility::HitTestInvisible);
-	}
+	// TODO: 전투 상태 공지 위젯 텍스트 업데이트
 }
 
 void ABattleHUD::HandleTurnUnitChanged(ABattleBaseUnit* ActiveUnit)
@@ -99,26 +119,39 @@ void ABattleHUD::HandleTurnUnitChanged(ABattleBaseUnit* ActiveUnit)
 	if (!BattleActionMenuWidget || !ActiveUnit) return;
 	
 	// 아군 턴일 때만 스킬창 활성화 로직을 HUD가 직접 제어
-	bool bIsAlly = ActiveUnit->IsA<ABattleAllyUnit>();
-	BattleActionMenuWidget->SetVisibility(bIsAlly ? ESlateVisibility::Visible : ESlateVisibility::Collapsed);
+	//bool bIsAlly = ActiveUnit->IsA<ABattleAllyUnit>();
+	//BattleActionMenuWidget->SetVisibility(bIsAlly ? ESlateVisibility::Visible : ESlateVisibility::Collapsed);
 	
 	if (ABattleAllyUnit* AllyUnit = Cast<ABattleAllyUnit>(ActiveUnit))
 	{
-		// 1. 카메라 줌인 (시네마틱 카메라 전환)
-		APlayerController* PC = GetOwningPlayerController();
-		// AllyUnit 내부의 CineCameraComponent로 0.8초간 부드럽게 전환
-		PC->SetViewTargetWithBlend(AllyUnit, 0.8f, VTBlend_Cubic);
-		
 		if (BattleActionMenuWidget)
 		{
 			BattleActionMenuWidget->ShowMenu(AllyUnit);
 		}
 	}
-	else // 적군 턴일 때 (필요시 적군에게도 카메라 포커스 가능)
-	{
-		
-		if (BattleActionMenuWidget) BattleActionMenuWidget->SetVisibility(ESlateVisibility::Collapsed);
-	}
+}
+
+void ABattleHUD::ShowActionMenu(ABattleAllyUnit* AllyUnit)
+{
+	if (!BattleActionMenuWidget || !AllyUnit) return;
+	BattleActionMenuWidget->ShowMenu(AllyUnit);
+	BattleActionMenuWidget->SetVisibility(ESlateVisibility::Visible);
+}
+
+void ABattleHUD::HideActionMenu()
+{
+	if (!BattleActionMenuWidget) return;
+	BattleActionMenuWidget->SetVisibility(ESlateVisibility::Collapsed);
+}
+
+void ABattleHUD::ShowGameOverUI()
+{
+	if (GameOverWidget) GameOverWidget->SetVisibility(ESlateVisibility::Visible);
+}
+
+void ABattleHUD::ShowVictoryUI()
+{
+	if (VictoryWidget) VictoryWidget->SetVisibility(ESlateVisibility::Visible);
 }
 
 void ABattleHUD::HandleActionOrderChanged(const TArray<AActor*>& NewOrder)
@@ -133,6 +166,11 @@ void ABattleHUD::HandleActionOrderChanged(const TArray<AActor*>& NewOrder)
 	{
 		UE_LOG(LogTemp, Error, TEXT("BattleHUD: TurnOrderWidget is NULL!"));
 	}
+}
+
+void ABattleHUD::HandleTargetChanged(AActor* NewTarget)
+{
+	if (!NewTarget) return;
 }
 
 void ABattleHUD::HandleAllyUnitInfoUpdate()

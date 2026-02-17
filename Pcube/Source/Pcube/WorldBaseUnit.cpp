@@ -2,33 +2,66 @@
 
 
 #include "WorldBaseUnit.h"
+#include "UnitDataAsset.h"
+#include "GameFramework/CharacterMovementComponent.h"
 
-// Sets default values
+
 AWorldBaseUnit::AWorldBaseUnit()
 {
- 	// Set this character to call Tick() every frame.  You can turn this off to improve performance if you don't need it.
-	PrimaryActorTick.bCanEverTick = true;
+	PrimaryActorTick.bCanEverTick = false;
 
-}
-
-// Called when the game starts or when spawned
-void AWorldBaseUnit::BeginPlay()
-{
-	Super::BeginPlay();
+	// 월드 이동 유닛이므로 Movement 기본값
+	if (UCharacterMovementComponent* MoveComp = GetCharacterMovement())
+	{
+		MoveComp->bOrientRotationToMovement = true;
+		MoveComp->RotationRate = FRotator(0.0f, 360.0f, 0.0f);
+		MoveComp->MaxWalkSpeed = 300.f;
+	}
 	
+	// 컨트롤러 회전 영향 제거
+	bUseControllerRotationYaw = false;
+	
+	// ACharacter 기본 메시 정렬은 BP에서 조정하는게 가장 편하다고 함
+	// 근데 내 구조에서 BP에서 조정하는게 가능한가?
 }
 
-// Called every frame
-void AWorldBaseUnit::Tick(float DeltaTime)
+void AWorldBaseUnit::InitFromUnitData(UUnitDataAsset* InUnitData)
 {
-	Super::Tick(DeltaTime);
-
+	UnitData = InUnitData;
+	if (!UnitData)
+	{
+		UE_LOG(LogTemp, Error, TEXT("[WorldBaseUnit] UnitData is null"));
+		return;
+	}
+	
+	USkeletalMeshComponent* MeshComp = GetMesh();
+	if (!MeshComp)
+	{
+		UE_LOG(LogTemp, Error, TEXT("[WorldBaseUnit] GetMesh() is null"));
+		return;
+	}
+	
+	// 월드 스켈레탈 적용
+	if (UnitData->WorldSkeletalMesh)
+	{
+		MeshComp->SetSkeletalMesh(UnitData->WorldSkeletalMesh);
+		MeshComp->SetHiddenInGame(false);
+	}
+	
+	// 월드 애님 BP 적용
+	if (UnitData->WorldAnimBlueprintClass)
+	{
+		MeshComp->SetAnimationMode(EAnimationMode::AnimationBlueprint);
+		MeshComp->SetAnimInstanceClass(UnitData->WorldAnimBlueprintClass);
+	}
+	else
+	{
+		// 프로토타입 - 애님BP 없으면 포즈 고정
+		MeshComp->SetAnimationMode(EAnimationMode::AnimationSingleNode);
+	}
+	
+	UE_LOG(LogTemp, Warning, TEXT("[WorldBaseUnit] Init OK: %s Skeletal=%s AnimBP=%s"),
+		*GetName(),
+		*GetNameSafe(UnitData->WorldSkeletalMesh),
+		*GetNameSafe(UnitData->WorldAnimBlueprintClass));
 }
-
-// Called to bind functionality to input
-void AWorldBaseUnit::SetupPlayerInputComponent(UInputComponent* PlayerInputComponent)
-{
-	Super::SetupPlayerInputComponent(PlayerInputComponent);
-
-}
-

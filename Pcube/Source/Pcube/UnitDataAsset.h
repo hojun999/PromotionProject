@@ -43,16 +43,21 @@ public:
 	
 	// --- 비주얼 설정 ---
 	// 예시용 스태틱 메시
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Visual")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Visual|Battle")
 	UStaticMesh* UnitStaticMesh;
 	
 	// 캐릭터용 스켈레탈 메시 (애니메이션이 필요한 경우)
-	// UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Visual")
-	// USkeletalMesh* UnitSkeletalMesh;
+	// 아군 - 기본, 적 - 살아있을 때
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Visual|World")
+	USkeletalMesh* WorldSkeletalMesh;
 	
 	// 애니메이션 블루프린트 (공격, 대기 등 동작 제어)
-	// UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Visual")
-	// TSubclassOf<UAnimInstance> AnimBlueprintClass;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Visual|World")
+	TSubclassOf<UAnimInstance> WorldAnimBlueprintClass;
+	
+	// 적 전용 - 월드에서 죽었을 때 전환할 스태틱 메시
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Visual|World")
+	UStaticMesh* DeadStaticMesh;
 	
 	// ---
 	

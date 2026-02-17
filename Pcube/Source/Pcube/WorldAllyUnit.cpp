@@ -2,9 +2,12 @@
 
 
 #include "WorldAllyUnit.h"
+
+#include "BattleInfoTransferSubsystem.h"
 #include "GameFramework/SpringArmComponent.h"
 #include "Camera/CameraComponent.h"
 #include "GameFramework/CharacterMovementComponent.h"
+#include "Kismet/GameplayStatics.h"
 
 AWorldAllyUnit::AWorldAllyUnit()
 {
@@ -24,6 +27,36 @@ AWorldAllyUnit::AWorldAllyUnit()
 	bUseControllerRotationYaw = false; // 캐릭터가 카메라 방향을 따라가지 않음
 	GetCharacterMovement()->bOrientRotationToMovement = true; // 이동 방향으로 자동 회전
 	GetCharacterMovement() ->RotationRate = FRotator(0.0f, 360.0f, 0.0f); // 회전 속도
+}
+
+void AWorldAllyUnit::BeginPlay()
+{
+	Super::BeginPlay();
+	
+	UGameInstance* GI = GetGameInstance();
+	UBattleInfoTransferSubsystem* Transfer = GI ? GI->GetSubsystem<UBattleInfoTransferSubsystem>() : nullptr;
+	if (!Transfer) return;
+	
+	FVector ReturnLoc;
+	FRotator ReturnRot;
+	if (Transfer->ConsumeReturnPoint(ReturnLoc, ReturnRot))
+	{
+		// 1. 위치 적용
+		TeleportTo(ReturnLoc, ReturnRot);
+		
+		// 2. 컨트롤러 회전 정렬
+		if (Controller)
+		{
+			Controller->SetControlRotation(ReturnRot);
+		}
+		
+		// 3. 스트리밍 볼륨 기반 -> 텔레포트 반영 후 다음 틱에 Flush
+		FTimerHandle TH;
+		GetWorldTimerManager().SetTimerForNextTick([this]()
+		{
+			UGameplayStatics::FlushLevelStreaming(this);
+		});
+	}
 }
 
 void AWorldAllyUnit::SetupPlayerInputComponent(UInputComponent* PlayerInputComponent)

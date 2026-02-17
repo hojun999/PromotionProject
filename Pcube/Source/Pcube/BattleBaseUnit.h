@@ -42,13 +42,27 @@ public:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Stats")
 	float CurrentAttackPower;
 	
+	UPROPERTY(BlueprintReadOnly)
+	bool bIsDead = false;
+	
+	UFUNCTION(BlueprintCallable)
+	bool IsDead() const { return bIsDead || CurrentHP <= 0.f; }
+	
 	// 델리게이트 인스턴스 변수 생성
 	UPROPERTY(BlueprintAssignable, Category="Battle")
 	FOnActionFinished OnActionFinished;
 	
+	// 컴포넌트
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="UI")
+	class USceneComponent* UIAnchorPoint;
+	
 	// --- 전투 핵심 로직
 	// 행동 종료 시 호출할 함수
 	void FinishAction();
+	
+	void ExecuteAction(USkillDataAsset* SkillData, AActor* TargetUnit);
+	
+	void ApplyCurrentSkillDamage();
 	
 	// 언리얼 기본 데미지 함수
 	virtual float TakeDamage(float DamageAmount, struct FDamageEvent const& DamageEvent, class AController* EventInstigator, AActor* DamageCauser) override;
@@ -79,6 +93,13 @@ protected:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Camera")
 	UCineCameraComponent* CineCameraComp;
 	
+	// 애니메이션 노티파이로부터 호출될 함수
+	UFUNCTION()
+	void HandleHitNotify(FName NotifyName, const FBranchingPointNotifyPayload& Payload);
+	
+	UFUNCTION()
+	void OnActionMontageEnded(UAnimMontage* Montage, bool bInterrupted);
+	
 	// 마우스 클릭 시 호출되는 엔진 기본 이벤트
 	virtual void NotifyActorOnClicked(FKey ButtonPressed = EKeys::LeftMouseButton) override;
 	
@@ -86,6 +107,11 @@ protected:
 	UPROPERTY(BlueprintReadOnly, Category="Selection")
 	bool bIsSelected;
 	
+private:
+	UPROPERTY()
+	AActor* CurrentActionTarget;	// 현재 타겟 저장
 	
+	UPROPERTY()
+	class USkillDataAsset* CurrentSkillData; // 현재 사용 중인 스킬 데이터
 
 };

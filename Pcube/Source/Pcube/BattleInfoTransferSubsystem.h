@@ -36,10 +36,24 @@ struct FBattleInfoStruct
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Level")
 	FRotator ReturnRotation;
 	
+	bool bHasReturnPoint = false;
+	
 	// TODO: 배경 오브젝트에 대한 정보는 분리할 필요가 있어보임
 	// 전투 배경 테마 정보
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Environment")
 	int32 BattleBackgroundID;
+};
+
+USTRUCT(BlueprintType)
+struct FEncounterContext
+{
+	GENERATED_BODY()
+	
+	UPROPERTY()
+	FName EncounterID = NAME_None;
+	
+	UPROPERTY()
+	FName ReturnWorldLevel = NAME_None;
 };
 
 UCLASS()
@@ -52,18 +66,40 @@ public:
 	
 	virtual void Initialize(FSubsystemCollectionBase& Collection) override;
 	
-	// UFUNCTION(BlueprintCallable, Category="Save|Load")
-	// void SaveGameProgress();
-	//
-	// UFUNCTION(BlueprintCallable, Category="Save|Load")
-	// void LoadGameProgress();
+	// 데이터 초기화를 위한 함수
+	void InitEnemyBattleInfo(const TArray<FUnitSpawnInfo>& NewSpawnEnemies);
 	
-	//UUnitDataAsset* FindUnitDataAssetByID(FString ID);
+	// World Level에서 전투 진입 직전에 호출
+	void SetPendingEncounter(FName EncounterID, FName ReturnWorldLevel);
+	
+	UFUNCTION(BlueprintCallable)
+	void SetReturnPoint(FName SourceWorldLevel, const FVector& Loc, const FRotator& Rot);
+	
+	UFUNCTION(BlueprintCallable)
+	bool ConsumeReturnPoint(FVector& OutLoc, FRotator& OutRot);
+	
+	UFUNCTION(BlueprintCallable)
+	void ClearReturnPoint();
+	
+	// 전투 승리 후 호출
+	void MarkLastEncounterDefeated();
+	
+	bool IsEncounterDefeated(FName EncounterID) const;
+	
+	UFUNCTION(BlueprintCallable)
+	FName GetReturnWorldLevelName() const;
+	
+	UFUNCTION(BlueprintCallable)
+	void ClearPendingEncounter();
 	
 	// 현재 활성화된 데이터 정보 - WorldEnemyUnit으로부터 전달됨
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Battle")
 	FBattleInfoStruct BattleInfo;
 	
-	// 데이터 초기화를 위한 함수
-	void InitEnemyBattleInfo(const TArray<FUnitSpawnInfo>& NewSpawnEnemies);
+private:
+	UPROPERTY()
+	FEncounterContext PendingEncounter;
+	
+	UPROPERTY()
+	TSet<FName> DefeatedEncounterIds;
 };

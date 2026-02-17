@@ -38,12 +38,17 @@ AActor* UBattleTurnManager::GetNextUnit()
 {
 	for (FBattleTurnUnit& TurnData : RoundArray)
 	{
-		// 아직 행동하지 않은 유닛 중 정렬된 순서에서 가장 위에 있는 유닛 선택
-		if (!TurnData.bHasActed && IsValid(TurnData.UnitActor))
+		if (TurnData.bHasActed || !IsValid(TurnData.UnitActor)) continue;
+		
+		ABattleBaseUnit* Unit = Cast<ABattleBaseUnit>(TurnData.UnitActor);
+		if (Unit && Unit->IsDead())
 		{
-			TurnData.bHasActed = true; // 행동 완료 처리
-			return TurnData.UnitActor;
+			TurnData.bHasActed = true;
+			continue;
 		}
+		
+		TurnData.bHasActed = true;
+		return TurnData.UnitActor;
 	}
 	
 	return nullptr; // 해당 라운드 행동 완료
