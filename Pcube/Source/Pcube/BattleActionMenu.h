@@ -5,6 +5,7 @@
 #include "CoreMinimal.h"
 #include "Blueprint/UserWidget.h"
 #include "BattleAllyUnit.h"
+#include "BattleSkillSlotWidget.h"
 #include "BattleActionMenu.generated.h"
 
 class ABattleAllyUnit;
@@ -13,7 +14,17 @@ class UVerticalBox;
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnActionRequested, USkillDataAsset*, SkillDataAsset);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnSkillMenuRequested);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnSkillRequested, USkillDataAsset*, Skill);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnItemMenuRequested);
+
+UENUM(BlueprintType)
+enum class EActionMenuSubPanel : uint8
+{
+	Main UMETA(DisplayName="Main"),
+	SkillList UMETA(DisplayName="SkillList"),
+	ItemList UMETA(DisplayName="ItemList"),
+};
+
 
 UCLASS()
 class PCUBE_API UBattleActionMenu : public UUserWidget
@@ -22,30 +33,35 @@ class PCUBE_API UBattleActionMenu : public UUserWidget
 	
 public:
 	// HUD에서 호출 - 메뉴 초기화 및 표시
+	UFUNCTION(BlueprintCallable)
 	void ShowMenu(ABattleAllyUnit* TargetUnit);
+	
 	void UpdateMenuPosition();
 	void NativeTick(const FGeometry& MyGeometry, float InDeltaTime) override;
 	
+	// ESC 등으로 열린 서브메뉴를 닫고 메인 버튼을 다시 활성화
+	UFUNCTION(BlueprintCallable)
+	bool TryCancelSubMenu(); // 서브메뉴가 열려있으면 닫기 - 취소 입력 처리용
+	
+	UFUNCTION(BlueprintCallable)
+	bool IsAnySubMenuOpen() const; // 서브메뉴 열림 여뷰 - PC에서 분기
+	
+	// --- 델리게이트 ---
 	UPROPERTY(BlueprintAssignable)
 	FOnActionRequested OnActionRequested;
 	
 	UPROPERTY(BlueprintAssignable)
 	FOnSkillMenuRequested OnSkillMenuRequested;
 	
+	UPROPERTY(BlueprintAssignable, Category="Battle|UI")
+	FOnSkillRequested OnSkillRequested;
+	
 	UPROPERTY(BlueprintAssignable)
 	FOnItemMenuRequested OnItemMenuRequested;
 	
-	// --- 이벤트 핸들러 ---
-	UFUNCTION(BlueprintCallable)
-	void OnAttackClicked();
-	
-	UFUNCTION(BlueprintCallable)
-	void OnSkillMenuClicked();
-	
-	UFUNCTION(BlueprintCallable)
-	void OnItemMenuClicked();
-	
 protected:
+	virtual void NativeConstruct() override;
+	
 	// --- 메인 버튼 ---
 	UPROPERTY(meta = (BindWidget))
 	UButton* Btn_Attack;
@@ -65,14 +81,50 @@ protected:
 	UVerticalBox* ItemListWidget;
 	// class UItemListWidget* ItemListWidget;
 	
+	// --- 이벤트 핸들러 ---
+	UFUNCTION(BlueprintCallable)
+	void OnAttackClicked();
+	
+	UFUNCTION(BlueprintCallable)
+	void OnSkillMenuClicked();
+	
+	UFUNCTION(BlueprintCallable)
+	void OnItemMenuClicked();
+	
+	UFUNCTION()
+	void HandleSkillSlotClicked(USkillDataAsset* Skill);
+	
+	void RebuildSkillList();
 	
 	// --- 스킬 데이터 에셋 ---
 	UPROPERTY(EditAnywhere, Category="Battle|Data")
 	USkillDataAsset* BasicAttackData;
 	
+	UPROPERTY(EditAnywhere, Category="Battle|UI")
+	TSubclassOf<UBattleSkillSlotWidget> SkillSlotClass;
 private:
+	// --- 함수 ---
+	// 메인 버튼 3개를 한 번에 활성/비활성
+	void SetMainButtonsEnabled(bool bEnabled);
+	
+	// 현재 패널 상태를 위젯에 반영
+	void ApplySubPanelState(); // SkillList/ItemList 표시 및 버튼 활성 상태를 한 곳에서 갱신
+	
+	// 현재 서브패널 상태 (메인/스킬/아이템)
 	UPROPERTY()
-	ABattleAllyUnit* CurrentUnit;
+	EActionMenuSubPanel CurrentSubPanel = EActionMenuSubPanel::Main; // 어떤 리스트가 열려있는지 추적
+	
+	// 행동이 진행 중이면 메인 버튼 잠금 유지 - 스킬 선택 직후 등
+	UPROPERTY()
+	bool bMainButtonsLocked = false;
+	
+	
+	// --- 변수 ---
+	UPROPERTY()
+	TObjectPtr<ABattleAllyUnit> CurrentUnit;
+	
+	UPROPERTY()
+	TArray<TObjectPtr<UBattleSkillSlotWidget>> SpawnedSkillSlots;
 	
 	bool bIsFollowingUnit;
 };

@@ -2,6 +2,8 @@
 
 
 #include "BattleHUD.h"
+
+#include "AllyStatusPanelWidget.h"
 #include "BattleAllyUnit.h"
 #include "BattleBaseUnit.h"
 #include "BattlePlayerController.h"
@@ -45,7 +47,7 @@ void ABattleHUD::CreateAllWidgets()
 	APlayerController* PC = GetOwningPlayerController();
 	if (!PC) return;
 	
-	// 각 턴마다 유닛들의 행동 순서를 나타내는 위젯 생성
+	// 행동 순서 UI
 	if (ActionOrderClass)
 	{
 		ActionOrderWidget = CreateWidget<UBattleActionOrderWidget>(PC, ActionOrderClass);
@@ -58,32 +60,64 @@ void ABattleHUD::CreateAllWidgets()
 		UE_LOG(LogTemp, Error, TEXT("BattleHUD: ActionOrderClass is MISSING!"));
 	}
 	
-	// 스킬 패널 생성
+	// 행동 선택 UI - 무조건 화면에서 보여야 됨 ***
 	if (ActionMenuClass)
 	{
 		BattleActionMenuWidget = CreateWidget<UBattleActionMenu>(PC, ActionMenuClass);
-		BattleActionMenuWidget->AddToViewport();
+		BattleActionMenuWidget->AddToViewport(50);
 		BattleActionMenuWidget->SetVisibility(ESlateVisibility::Collapsed);
+	}
+	
+	// 아군 유닛 초상화 및 체력 상태 위젯 생성
+	if (AllyStatusPanelClass)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("[HUD] AllyStatusPanelClass=%s"), *GetNameSafe(AllyStatusPanelClass.Get()));
+		
+		AllyStatusPanelWidget = CreateWidget<UAllyStatusPanelWidget>(PC, AllyStatusPanelClass);
+		if (!AllyStatusPanelWidget)
+		{
+			UE_LOG(LogTemp, Warning, TEXT("[HUD] AllyStatusPanelClass=%s"), *GetNameSafe(AllyStatusPanelClass.Get()));
+		}
+		else
+		{
+			AllyStatusPanelWidget->AddToViewport(10);
+			AllyStatusPanelWidget->SetVisibility(ESlateVisibility::Visible);
+			//AllyStatusPanelWidget->SetRenderOpacity(1.f);
+			
+			// 1) 일단 화면 좌상단에 박아 넣기 (안 보이면 “크기 0”/“위젯 내부 문제” 확정)
+			// AllyStatusPanelWidget->SetPositionInViewport(FVector2D(50.f, 50.f), false);
+			// AllyStatusPanelWidget->SetDesiredSizeInViewport(FVector2D(800.f, 200.f));
+			// AllyStatusPanelWidget->SetAlignmentInViewport(FVector2D(0.f, 0.f));
+			
+			UE_LOG(LogTemp, Warning, TEXT("[HUD] AllyStatusPanelWidget created=%s inViewport=%d vis=%d"),
+			*GetNameSafe(AllyStatusPanelWidget),
+			AllyStatusPanelWidget->IsInViewport(),
+			(int32)AllyStatusPanelWidget->GetVisibility());
+		}
+	}
+	else
+	{
+		UE_LOG(LogTemp, Error, TEXT("[HUD] AllyStatusPanelClass is MISSING (set it in BP_BattleHUD defaults)"));
 	}
 	
 	// 전투 진행에 따른 텍스트 출력 위젯 생성
 	if (BattleStateNoticeClass)
 	{
 		BattleStateNoticeWidget = CreateWidget<UUserWidget>(PC, BattleStateNoticeClass);
-		BattleStateNoticeWidget->AddToViewport();
+		BattleStateNoticeWidget->AddToViewport(10);
 	}
 	
 	if (GameOverWidgetClass)
 	{
 		GameOverWidget = CreateWidget<UUserWidget>(PC, GameOverWidgetClass);
-		GameOverWidget->AddToViewport(50);
+		GameOverWidget->AddToViewport(10);
 		GameOverWidget->SetVisibility(ESlateVisibility::Collapsed);
 	}
 	
 	if (VictoryWidgetClass)
 	{
 		VictoryWidget = CreateWidget<UUserWidget>(PC, VictoryWidgetClass);
-		VictoryWidget->AddToViewport(50);
+		VictoryWidget->AddToViewport(10);
 		VictoryWidget->SetVisibility(ESlateVisibility::Collapsed);
 	}
 }
@@ -99,6 +133,7 @@ void ABattleHUD::BindSubsystemEvents()
 			BattleContorlSub->OnTurnUnitChanged.AddDynamic(this, &ABattleHUD::HandleTurnUnitChanged);
 			BattleContorlSub->OnTurnOrderChanged.AddDynamic(this, &ABattleHUD::HandleActionOrderChanged);
 			BattleContorlSub->OnTargetChanged.AddDynamic(this, &ABattleHUD::HandleTargetChanged);
+			BattleContorlSub->OnBattleUnitsSpawned.AddDynamic(this, &ABattleHUD::HandleBattleUnitSpawned);
 			
 			UE_LOG(LogTemp, Warning, TEXT("BattleHUD: OnTurnOrderChanged Bound Successfully!"));
 		}
@@ -112,6 +147,21 @@ void ABattleHUD::BindSubsystemEvents()
 void ABattleHUD::HandleBattleStateChanged(EBattleState NewState)
 {
 	// TODO: 전투 상태 공지 위젯 텍스트 업데이트
+}
+
+void ABattleHUD::HandleBattleUnitSpawned(const TArray<AActor*>& Allies, const TArray<AActor*>& Enemies)
+{
+	UE_LOG(LogTemp, Warning, TEXT("[HUD] HandleBattleUnitSpawned Allies=%d Enemies=%d Panel=%s"),
+		Allies.Num(), Enemies.Num(), *GetNameSafe(AllyStatusPanelWidget));
+	
+	if (AllyStatusPanelWidget)
+	{
+		AllyStatusPanelWidget->InitParty(Allies);
+	}
+	else
+	{
+		UE_LOG(LogTemp, Error, TEXT("[HUD] AllyStatusPanelWidget is NULL (cannot InitParty)"));
+	}
 }
 
 void ABattleHUD::HandleTurnUnitChanged(ABattleBaseUnit* ActiveUnit)
@@ -128,14 +178,44 @@ void ABattleHUD::HandleTurnUnitChanged(ABattleBaseUnit* ActiveUnit)
 		{
 			BattleActionMenuWidget->ShowMenu(AllyUnit);
 		}
+		
+		if (AllyStatusPanelWidget)
+		{
+			AllyStatusPanelWidget->SetActiveUnit(AllyUnit);
+		}
+	}
+	else
+	{
+		// 적 턴이면 ActiveBorder 끄기
+		if (AllyStatusPanelWidget)
+		{
+			AllyStatusPanelWidget->SetActiveUnit(nullptr);
+		}
+
+		// 적 턴이면 메뉴 숨기기
+		// if (BattleActionMenuWidget)
+		// {
+		// 	BattleActionMenuWidget->SetVisibility(ESlateVisibility::Collapsed);
+		// }
 	}
 }
 
 void ABattleHUD::ShowActionMenu(ABattleAllyUnit* AllyUnit)
 {
+	UE_LOG(LogTemp, Warning, TEXT("[HUD] ShowActionMenu unit=%s widget=%s visBefore=%d inViewport=%d"),
+	*GetNameSafe(AllyUnit),
+	*GetNameSafe(BattleActionMenuWidget),
+	BattleActionMenuWidget ? (int32)BattleActionMenuWidget->GetVisibility() : -1,
+	BattleActionMenuWidget ? (int32)BattleActionMenuWidget->IsInViewport() : -1);
+	
 	if (!BattleActionMenuWidget || !AllyUnit) return;
+	
 	BattleActionMenuWidget->ShowMenu(AllyUnit);
 	BattleActionMenuWidget->SetVisibility(ESlateVisibility::Visible);
+	
+	UE_LOG(LogTemp, Warning, TEXT("[HUD] Menu visAfter=%d inViewport=%d"),
+	(int32)BattleActionMenuWidget->GetVisibility(),
+	(int32)BattleActionMenuWidget->IsInViewport());
 }
 
 void ABattleHUD::HideActionMenu()

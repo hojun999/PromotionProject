@@ -54,6 +54,8 @@ void UBattleInfoTransferSubsystem::InitializeDefaultAllyParty(UAllyPartyDataAsse
 		}
 		BattleInfo.AlliesToSpawn.Add(MemberInfo);
 	}
+	
+	EnsureAllyRuntimeSize(BattleInfo.AlliesToSpawn.Num());
 }
 
 void UBattleInfoTransferSubsystem::SetPendingEncounter(FName EncounterID, FName ReturnWorldLevel)
@@ -135,4 +137,28 @@ void UBattleInfoTransferSubsystem::MarkLastEncounterDefeated()
 bool UBattleInfoTransferSubsystem::IsEncounterDefeated(FName EncounterID) const
 {
 	return DefeatedEncounterIds.Contains(EncounterID);
+}
+
+void UBattleInfoTransferSubsystem::EnsureAllyRuntimeSize(int32 Num)
+{
+	if (AllyRuntimeStates.Num() < Num)
+	{
+		const int32 Old = AllyRuntimeStates.Num();
+		AllyRuntimeStates.SetNum(Num);
+		for (int32 i = Old; i < Num; ++i)
+		{
+			AllyRuntimeStates[i].SavedHP = -1.f;;
+		}
+	}
+}
+
+float UBattleInfoTransferSubsystem::GetSavedHP(int32 PartyIndex) const
+{
+	return AllyRuntimeStates.IsValidIndex(PartyIndex) ? AllyRuntimeStates[PartyIndex].SavedHP : -1.f;
+}
+
+void UBattleInfoTransferSubsystem::SetSavedHP(int32 PartyIndex, float NewHP)
+{
+	EnsureAllyRuntimeSize(PartyIndex + 1);
+	AllyRuntimeStates[PartyIndex].SavedHP = NewHP;
 }

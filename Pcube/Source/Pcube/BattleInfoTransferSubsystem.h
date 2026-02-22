@@ -12,6 +12,16 @@
 class ABattleBaseUnit;
 class UUnitDataAsset;
 
+USTRUCT()
+struct FPartyMemberRuntimeState
+{
+	GENERATED_BODY()
+	
+	// -1이면 저장된 값 없음 -> 풀피로 스폰
+	UPROPERTY()
+	float SavedHP = -1.f;
+};
+
 USTRUCT(BlueprintType)
 struct FBattleInfoStruct
 {
@@ -89,12 +99,21 @@ public:
 	UFUNCTION(BlueprintCallable)
 	FName GetReturnWorldLevelName() const;
 	
+	// --- 아군 유닛 HP bar 갱신을 위한 함수들 ---
+	void EnsureAllyRuntimeSize(int32 Num);
+	float GetSavedHP(int32 PartyIndex) const;
+	void SetSavedHP(int32 PartyIndex, float NewHP);
+	
 	UFUNCTION(BlueprintCallable)
 	void ClearPendingEncounter();
 	
 	// 현재 활성화된 데이터 정보 - WorldEnemyUnit으로부터 전달됨
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Battle")
 	FBattleInfoStruct BattleInfo;
+	
+	// 파티는 인덱스 기반으로 저장됨
+	UPROPERTY()
+	TArray<FPartyMemberRuntimeState> AllyRuntimeStates;
 	
 private:
 	UPROPERTY()

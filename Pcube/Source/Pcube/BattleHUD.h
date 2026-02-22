@@ -49,6 +49,9 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category="Battle|UI")
 	TSubclassOf<UUserWidget> VictoryWidgetClass;
 	
+	UPROPERTY(EditAnywhere, Category="Battle|UI")
+	TSubclassOf<class UAllyStatusPanelWidget> AllyStatusPanelClass;
+	
 	// --- 생성된 위젯 인스턴스 참조 ---
 	// 그냥 클래스 참조랑 TObjectPtr이랑 뭐가 다른거?
 	UPROPERTY()
@@ -64,6 +67,9 @@ protected:
 	UUserWidget* AllyUnitInfoWidget;
 	
 	UPROPERTY()
+	class UAllyStatusPanelWidget* AllyStatusPanelWidget = nullptr;
+	
+	UPROPERTY()
 	TObjectPtr<UUserWidget> GameOverWidget;
 	
 	UPROPERTY()
@@ -73,6 +79,9 @@ protected:
 	UFUNCTION()
 	void HandleBattleStateChanged(EBattleState NewState);
 
+	UFUNCTION()
+	void HandleBattleUnitSpawned(const TArray<AActor*>& Allies, const TArray<AActor*>& Enemies);
+	
 	UFUNCTION()
 	void HandleTurnUnitChanged(ABattleBaseUnit* ActiveUnit);
 

@@ -3,7 +3,6 @@
 #pragma once
 
 #include "CoreMinimal.h"
-#include "BattleEnemyUnit.h"
 #include "Engine/DataAsset.h"
 #include "UnitDataAsset.generated.h"
 
@@ -41,10 +40,16 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Identity")
 	UTexture2D* UnitIcon;
 	
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="UI")
+	TObjectPtr<UTexture2D> PortraitTexture = nullptr;
+	
 	// --- 비주얼 설정 ---
 	// 예시용 스태틱 메시
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Visual|Battle")
 	UStaticMesh* UnitStaticMesh;
+	
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Visual|Battle")
+	USkeletalMesh* BattleSkeletalMesh;
 	
 	// 캐릭터용 스켈레탈 메시 (애니메이션이 필요한 경우)
 	// 아군 - 기본, 적 - 살아있을 때
@@ -65,9 +70,19 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Battle")
 	TSubclassOf<ABattleBaseUnit> BattleUnitClass;
 	
+	// L_Battle에서 사용할 AnimBP(Idle/피격/사망 기본 StateMachine 포함)
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Visual|Battle")
+	TSubclassOf<UAnimInstance> BattleAnimBlueprintInstance = nullptr;
+	
 	// 기본 스탯
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Stats")
 	FUnitBaseStats BaseStats;
+	
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="SkillPoints")
+	int32 BaseSkillPoints = 0; // 아군 유닛마다의 값을 가짐. 에디터에서 설정
+	
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="SkillPoints")
+	int32 MaxSkillPoints; // 적: 0으로 설정, SP 시스템 미사용
 	
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Skills")
 	TArray<USkillDataAsset*> SkillList;

@@ -79,6 +79,10 @@ protected:
 	UPROPERTY(BlueprintReadOnly)
 	bool bIsCorpse = false;
 	
-	UPROPERTY()
-	bool bEncounterStarted = false;
+	//UPROPERTY()
+	//bool bEncounterStarted = false;
+	
+private:
+	UPROPERTY(Transient)
+	bool bEncounterLocked = false;
 };

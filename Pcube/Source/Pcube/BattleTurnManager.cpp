@@ -12,7 +12,15 @@ void UBattleTurnManager::InitNewRound(const TArray<AActor*>& ParticipatingUnits)
 	
 	for (AActor* Unit : ParticipatingUnits)
 	{
-		if (!Unit) continue;
+		if (!IsValid(Unit)) continue;
+		
+		if (ABattleBaseUnit* BU = Cast<ABattleBaseUnit>(Unit))
+		{
+			if (BU->IsDead())
+			{
+				continue;	// 죽은 유닛은 턴 표시 X
+			}
+		}
 		
 		FBattleTurnUnit TurnData;
 		TurnData.UnitActor = Unit;
@@ -47,11 +55,42 @@ AActor* UBattleTurnManager::GetNextUnit()
 			continue;
 		}
 		
-		TurnData.bHasActed = true;
 		return TurnData.UnitActor;
 	}
 	
 	return nullptr; // 해당 라운드 행동 완료
+}
+
+TArray<AActor*> UBattleTurnManager::GetRemainingActorList() const
+{
+	TArray<AActor*> Out;
+	for (const FBattleTurnUnit& TurnData : RoundArray)
+	{
+		if (TurnData.bHasActed) continue;
+		if (!IsValid(TurnData.UnitActor)) continue;
+		
+		if (const ABattleBaseUnit* BU = Cast<ABattleBaseUnit>(TurnData.UnitActor))
+		{
+			if (BU->IsDead()) continue; // 죽은 유닛 즉시 제외
+		}
+		
+		Out.Add(TurnData.UnitActor);
+	}
+	return Out;
+}
+
+void UBattleTurnManager::MarkUnitActed(AActor* UnitActor)
+{
+	if (!IsValid(UnitActor)) return;
+	
+	for (FBattleTurnUnit& TurnData : RoundArray)
+	{
+		if (TurnData.UnitActor == UnitActor)
+		{
+			TurnData.bHasActed = true;
+			return;
+		}
+	}
 }
 
 bool UBattleTurnManager::IsRoundFinished() const

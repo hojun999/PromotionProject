@@ -12,9 +12,6 @@
 
 class ABattleBaseUnit;
 
-
-
-
 UENUM(BlueprintType)
 enum class EBattleState : uint8
 {
@@ -47,6 +44,8 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnTargetChanged, AActor* , NewTarge
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnBattleFinished, EBattleResult, Result);
 
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FOnBattleUnitsSpawned, const TArray<AActor*>&, Allies, const TArray<AActor*>&, Enemis);
+
 UCLASS()
 class PCUBE_API UBattleControlSubsystem : public UWorldSubsystem
 {
@@ -59,6 +58,9 @@ public:
 	
 	UPROPERTY(BlueprintAssignable, Category="Battle|UI")
 	FOnBattleStateChanged OnBattleStateChanged;
+	
+	UPROPERTY(BlueprintAssignable, Category="Battle|UI")
+	FOnBattleUnitsSpawned OnBattleUnitsSpawned;
 	
 	UPROPERTY(BlueprintAssignable, Category="Battle|UI")
 	FOnTurnUnitChanged OnTurnUnitChanged;
@@ -101,6 +103,9 @@ public:
 	// 타겟 확정 (엔터 또는 유닛 클릭 시 호출)
 	void ConfirmTarget();
 	
+	// 전체/단일 공격에 따른 분기
+	void RequestUseSkill(USkillDataAsset* Skill);
+	
 	UFUNCTION(BlueprintCallable)
 	EBattleState GetCurrentState() const { return CurrentState; }
 	
@@ -136,7 +141,7 @@ private:
 	
 	int32 GetAliveUnitCount(const TArray<AActor*>& UnitList);
 	
-	void RebuildAvilableEnemyTargets();
+	void RebuildAavilableEnemyTargetsByRule();
 	
 	UPROPERTY()
 	TArray<AActor*> AvailableTargets;
@@ -149,6 +154,6 @@ private:
 	UPROPERTY()
 	AActor* SelectedTarget; // 현재 플레이어가 선택한 적 유닛
 	
-	
+	bool bBattleResolved = false;
 	
 };

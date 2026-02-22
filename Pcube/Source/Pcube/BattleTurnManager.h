@@ -36,6 +36,11 @@ public:
 	UFUNCTION(BlueprintCallable, Category="Battle|Turn")
 	AActor* GetNextUnit();
 	
+	TArray<AActor*> GetRemainingActorList() const;
+	
+	UFUNCTION(BlueprintCallable, Category="Battle|Turn")
+	void MarkUnitActed(AActor* UnitActor);
+	
 	// 모든 유닛의 행동 종료 확인
 	UFUNCTION(BlueprintCallable, Category="Battle|Turn")
 	bool IsRoundFinished() const;

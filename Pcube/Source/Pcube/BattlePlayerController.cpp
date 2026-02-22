@@ -84,6 +84,10 @@ void ABattlePlayerController::BindWidgetRequests()
 	{
 		ActionMenu->OnActionRequested.AddDynamic(this, &ABattlePlayerController::HandleActionRequested);
 	}
+	if (!ActionMenu->OnSkillRequested.IsAlreadyBound(this, &ABattlePlayerController::HandleSkillRequested))
+	{
+		ActionMenu->OnSkillRequested.AddDynamic(this, &ABattlePlayerController::HandleSkillRequested);
+	}
 	if (!ActionMenu->OnSkillMenuRequested.IsAlreadyBound(this, &ABattlePlayerController::HandleSkillMenuRequested))
 	{
 		ActionMenu->OnSkillMenuRequested.AddDynamic(this, &ABattlePlayerController::HandleSkillMenuRequested);
@@ -109,6 +113,27 @@ void ABattlePlayerController::HandleActionRequested(USkillDataAsset* SkillData)
 	
 	// 3. 전투 호출
 	BattleSub->StartTargetSelection(SkillData);
+}
+
+void ABattlePlayerController::HandleSkillRequested(USkillDataAsset* Skill)
+{
+	if (!IsValid(Skill)) return;
+	
+	// 전체 타겟 -> default camera로 전환
+	if (Skill->TargetType == ESkillTargetRule::AllEnemis ||
+		Skill->TargetType == ESkillTargetRule::AllAllies)
+	{
+		// 방법 1: PC에 함수 구현
+		FocusDefaultBattleCamera(0.3f);
+		
+		// 방법 2: BattlecontrolSubsystem에 OnTargetChanged(nullptr) 전달 후
+		// PC가 nullptr이면 default로 처리하는 로직
+	}
+	
+	if (UBattleControlSubsystem* Sub = GetWorld()->GetSubsystem<UBattleControlSubsystem>())
+	{
+		Sub->RequestUseSkill(Skill);
+	}
 }
 
 void ABattlePlayerController::HandleSkillMenuRequested()
@@ -149,6 +174,11 @@ void ABattlePlayerController::FocusViewTarget(AActor* Target, float BlendTime)
 	
 	// 시네마틱 카메라가 붙어있는 유닛 Actor로 뷰타겟 전환
 	SetViewTargetWithBlend(Target, BlendTime, VTBlend_Cubic);
+}
+
+void ABattlePlayerController::FocusDefaultBattleCamera(float BlendTime)
+{
+	// TODO: default camera로 전환
 }
 
 void ABattlePlayerController::ApplyInputMode_GameOnly(bool bShowCursor)
@@ -205,6 +235,11 @@ void ABattlePlayerController::HandleTurnUnitChanged(ABattleBaseUnit* ActiveUnit)
 		// TODO: 아래 함수 구현
 		BattleHUD->HideActionMenu();
 	}
+	
+	UE_LOG(LogTemp, Warning, TEXT("[PC] TurnUnit=%s HUD=%s Menu=%s"),
+	*GetNameSafe(ActiveUnit),
+	*GetNameSafe(BattleHUD),
+	BattleHUD ? *GetNameSafe(BattleHUD->GetActionMenuWidget()) : TEXT("null"));
 	
 	ApplyInputMode_GameOnly(false);
 }

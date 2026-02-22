@@ -38,26 +38,54 @@ void AWorldEnemyUnit::BeginPlay()
 {
 	Super::BeginPlay();
 	
-	UGameInstance* GI = GetGameInstance();
-	UBattleInfoTransferSubsystem* Transfer = GI ? GI->GetSubsystem<UBattleInfoTransferSubsystem>() : nullptr;
 	
-	// 이미 처치된 Encounter면 전투 트리거 바인딩 전에 시체화
-	if (Transfer && EncounterID != NAME_None && Transfer->IsEncounterDefeated(EncounterID))
-	{
-		ConvertToCorpse();
-		return;
-	}
-	
-	// 살아있을 때만 감지 이벤트 바인딩
+	// 로드 직후 즉시 오버랩 전부 꺼두기
 	if (DetectSphere)
 	{
-		DetectSphere->OnComponentBeginOverlap.AddDynamic(this, &AWorldEnemyUnit::OnDetectOverlap);
+		DetectSphere->SetGenerateOverlapEvents(false);
+		DetectSphere->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+		DetectSphere->OnComponentBeginOverlap.RemoveDynamic(this, &AWorldEnemyUnit::OnDetectOverlap);
+	}
+
+	if (UCapsuleComponent* Cap = GetCapsuleComponent())
+	{
+		Cap->SetGenerateOverlapEvents(false);
+		Cap->OnComponentBeginOverlap.RemoveDynamic(this, &AWorldEnemyUnit::OnEncounterOverlap);
+		Cap->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
 	}
 	
-	// 전투 시작 이벤트 바인딩
-	if (GetCapsuleComponent())
+	// defeated 체크
+	if (UGameInstance* GI = GetGameInstance())
 	{
-		GetCapsuleComponent()->OnComponentBeginOverlap.AddDynamic(this, &AWorldEnemyUnit::OnEncounterOverlap);
+		if (UBattleInfoTransferSubsystem* Transfer = GI->GetSubsystem<UBattleInfoTransferSubsystem>())
+		{
+			const bool bDefeated = Transfer->IsEncounterDefeated(EncounterID);
+			
+			UE_LOG(LogTemp, Warning, TEXT("[WorldEnemy] BeginPlay %s EncounterID=%s defeated=%d"),
+				*GetName(), *EncounterID.ToString(), bDefeated ? 1 : 0);
+			
+			if (bDefeated)
+			{
+				ConvertToCorpse();
+				return; // ★ 여기서 끝내야 함
+			}
+		}
+	}
+	
+	// 살아있을 때만 오버랩 키고 바인딩
+	if (DetectSphere)
+	{
+		DetectSphere->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
+		DetectSphere->SetGenerateOverlapEvents(true);
+		DetectSphere->OnComponentBeginOverlap.AddDynamic(this, &AWorldEnemyUnit::OnDetectOverlap);
+	}
+
+	if (UCapsuleComponent* Cap = GetCapsuleComponent())
+	{
+		Cap->SetGenerateOverlapEvents(true);
+		Cap->OnComponentBeginOverlap.AddDynamic(this, &AWorldEnemyUnit::OnEncounterOverlap);
+		// Pawn 오버랩만 허용(기존 설정 유지)
+		Cap->SetCollisionResponseToChannel(ECC_Pawn, ECR_Overlap);
 	}
 }
 
@@ -113,7 +141,18 @@ void AWorldEnemyUnit::OnEncounterOverlap(UPrimitiveComponent* OverlappedComponen
 										bool bFromSweep, const FHitResult& SweepResult)
 {
 	// 시체의 경우 전투 재시작 방지
-	if (bIsCorpse) return;
+	if (bIsCorpse || bEncounterLocked) return;
+	
+	if (UGameInstance* GI = GetGameInstance())
+	{
+		if (auto* Transfer = GI->GetSubsystem<UBattleInfoTransferSubsystem>())
+		{
+			if (Transfer->IsEncounterDefeated(EncounterID))
+			{
+				return;
+			}
+		}
+	}
 	
 	if (OtherActor && OtherActor->IsA(AWorldAllyUnit::StaticClass()))
 	{
@@ -124,29 +163,39 @@ void AWorldEnemyUnit::OnEncounterOverlap(UPrimitiveComponent* OverlappedComponen
 
 void AWorldEnemyUnit::StartEncounter(AActor* PlayerActor)
 {
-	if (bIsCorpse) return;
-	if (bEncounterStarted) return;
+	UE_LOG(LogTemp, Warning, TEXT("[WorldEnemy] StartEncounter name=%s id=%s locked=%d corpse=%d"),
+	*GetName(), *EncounterID.ToString(), bEncounterLocked?1:0, bIsCorpse?1:0);
 	
-	// bEncounterStarted = true;
-	//
-	// if (!SpawnData  || !UnitData)
-	// {
-	// 	UE_LOG(LogTemp, Error, TEXT("[%s] 데이터 에셋 할당 확인 필요!"), *GetName());
-	// 	bEncounterStarted = false;
-	// 	return;
-	// }
+	if (bIsCorpse || bEncounterLocked) return;
+	bEncounterLocked = true;
 	
+	if (!SpawnData  || !UnitData)
+	{
+		UE_LOG(LogTemp, Error, TEXT("[%s] 데이터 에셋 할당 확인 필요!"), *GetName());
+		return;
+	}
 	
-	// GameInstance에서 인스턴스 서브시스템 가져오기
+	// 오버랩이 또 들어와도 전투 재호출 안 되게 즉시 차단
+	if (DetectSphere)
+	{
+		DetectSphere->SetGenerateOverlapEvents(false);
+		DetectSphere->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	}
+	if (UCapsuleComponent* Cap = GetCapsuleComponent())
+	{
+		Cap->SetGenerateOverlapEvents(false);
+		Cap->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	}
+	
 	UGameInstance* GI = GetGameInstance();
+	if (!GI) return;
+	
 	UBattleInfoTransferSubsystem* Transfer = GI->GetSubsystem<UBattleInfoTransferSubsystem>();
 	if (!Transfer) return;
 	
-	// 이미 처치된 Encounter이면 바로 시체화
-	if (EncounterID != NAME_None && Transfer->IsEncounterDefeated(EncounterID))
+	if (EncounterID == NAME_None)
 	{
-		ConvertToCorpse();
-		return;
+		UE_LOG(LogTemp, Error, TEXT("[WorldEnemy] EncounterID is None. Defeat tracking will fail."));
 	}
 	
 	// 1. ReturnWorldLevel 결정
@@ -158,22 +207,14 @@ void AWorldEnemyUnit::StartEncounter(AActor* PlayerActor)
 	// 3. 월드 복귀 위치 저장 (Consume 대상)
 	Transfer->SetReturnPoint(WorldLevelName, PlayerActor->GetActorLocation(), PlayerActor->GetActorRotation());
 	
-	// 4. EnemyList 선택 (EncounterID 매칭, 없으면 0번 fallback)
-	const FString EncStr = EncounterID.ToString();
-	const FEnemySpawnGroup* Group = SpawnData->SpawnGroups.FindByPredicate(
-		[&](const FEnemySpawnGroup& G){ return G.EncounterID == EncStr; });
-
-	if (!Group && SpawnData->SpawnGroups.Num() > 0)
+	// 4. 적 스폰 정보 저장
+	if (SpawnData->SpawnGroups.Num() > 0)
 	{
-		Group = &SpawnData->SpawnGroups[0];
+		Transfer->InitEnemyBattleInfo(SpawnData->SpawnGroups[0].EnemyList);
 	}
-	if (!Group) return;
 
-	Transfer->InitEnemyBattleInfo(Group->EnemyList);
-
-	// 5) 전투 레벨 이동
-	UGameplayStatics::OpenLevel(this, FName("BattleLevel"));
-	
+	// 5. 전투 레벨 이동
+	UGameplayStatics::OpenLevel(this, FName("L_Battle"));
 }
 
 void AWorldEnemyUnit::ConvertToCorpse()
@@ -186,14 +227,15 @@ void AWorldEnemyUnit::ConvertToCorpse()
 	{
 		DetectSphere->SetGenerateOverlapEvents(false);
 		DetectSphere->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+		DetectSphere->OnComponentBeginOverlap.RemoveDynamic(this, &AWorldEnemyUnit::OnDetectOverlap);
 	}
 	
 	// 2. 전투 트리거 비활성화
 	if (UCapsuleComponent* CapComp = GetCapsuleComponent())
 	{
-		CapComp->OnComponentBeginOverlap.RemoveDynamic(this, &AWorldEnemyUnit::OnEncounterOverlap);
-		CapComp->SetCollisionResponseToChannel(ECC_Pawn, ECR_Ignore);
 		CapComp->SetGenerateOverlapEvents(false);
+		CapComp->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+		CapComp->OnComponentBeginOverlap.RemoveDynamic(this, &AWorldEnemyUnit::OnEncounterOverlap);
 	}
 	
 	// 3. 이동/AI 정지

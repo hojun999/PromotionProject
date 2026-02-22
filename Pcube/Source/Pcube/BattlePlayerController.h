@@ -42,6 +42,8 @@ private:
 	UFUNCTION()
 	void HandleActionRequested(USkillDataAsset* SkillData);
 	UFUNCTION()
+	void HandleSkillRequested(USkillDataAsset* Skill);
+	UFUNCTION()
 	void HandleSkillMenuRequested();
 	UFUNCTION()
 	void HandleItemMenuRequested();
@@ -50,6 +52,7 @@ private:
 	
 	// --- 카메라 / Input 헬퍼 ---
 	void FocusViewTarget(AActor* Target, float BlendTime);
+	void FocusDefaultBattleCamera(float BlendTime);
 	void ApplyInputMode_GameOnly(bool bShowCursor);
 	void ApplyInputMode_GameAndUI(UUserWidget* FocusWidget, bool bShowCursor);
 	

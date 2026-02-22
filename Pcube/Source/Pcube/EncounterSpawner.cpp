@@ -63,9 +63,7 @@ void AEncounterSpawner::BeginPlay()
 	if (!Enemy) return;
 	
 	Enemy->InitializeEncounterInfo(EncounterID, UnitData, SpawnData, bDefeated);
-	
-	
-	
+	Enemy->FinishSpawning(SpawnTM);
 }
 
 

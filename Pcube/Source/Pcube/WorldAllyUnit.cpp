@@ -8,6 +8,7 @@
 #include "Camera/CameraComponent.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "Kismet/GameplayStatics.h"
+#include "Components/CapsuleComponent.h"
 
 AWorldAllyUnit::AWorldAllyUnit()
 {
@@ -33,29 +34,21 @@ void AWorldAllyUnit::BeginPlay()
 {
 	Super::BeginPlay();
 	
-	UGameInstance* GI = GetGameInstance();
-	UBattleInfoTransferSubsystem* Transfer = GI ? GI->GetSubsystem<UBattleInfoTransferSubsystem>() : nullptr;
-	if (!Transfer) return;
 	
-	FVector ReturnLoc;
-	FRotator ReturnRot;
-	if (Transfer->ConsumeReturnPoint(ReturnLoc, ReturnRot))
+	if (UGameInstance* GI = GetGameInstance())
 	{
-		// 1. 위치 적용
-		TeleportTo(ReturnLoc, ReturnRot);
-		
-		// 2. 컨트롤러 회전 정렬
-		if (Controller)
+		if (UBattleInfoTransferSubsystem* Transfer = GI->GetSubsystem<UBattleInfoTransferSubsystem>())
 		{
-			Controller->SetControlRotation(ReturnRot);
+			FVector ReturnLoc;
+			FRotator ReturnRot;
+			if (Transfer->ConsumeReturnPoint(ReturnLoc, ReturnRot))
+			{
+				SetActorLocationAndRotation(ReturnLoc, ReturnRot, false, nullptr, ETeleportType::TeleportPhysics);
+				
+				// 텔레포트 후 오버랩 갱신(겹침 상태 정리)
+				GetCapsuleComponent()->UpdateOverlaps();
+			}
 		}
-		
-		// 3. 스트리밍 볼륨 기반 -> 텔레포트 반영 후 다음 틱에 Flush
-		FTimerHandle TH;
-		GetWorldTimerManager().SetTimerForNextTick([this]()
-		{
-			UGameplayStatics::FlushLevelStreaming(this);
-		});
 	}
 }
 
