@@ -11,6 +11,7 @@
 class ABattleAllyUnit;
 class UButton;
 class UVerticalBox;
+class UWidget;
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnActionRequested, USkillDataAsset*, SkillDataAsset);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnSkillMenuRequested);
@@ -18,11 +19,11 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnSkillRequested, USkillDataAsset*,
 DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnItemMenuRequested);
 
 UENUM(BlueprintType)
-enum class EActionMenuSubPanel : uint8
+enum class EActionMenuView : uint8
 {
-	Main UMETA(DisplayName="Main"),
-	SkillList UMETA(DisplayName="SkillList"),
-	ItemList UMETA(DisplayName="ItemList"),
+	Main UMETA(DisplayName="Main"),				// 3버튼 보임, 리스트 숨김
+	SkillList UMETA(DisplayName="SkillList"),	// 스킬 리스트 보임, 3버튼 숨김
+	ItemList UMETA(DisplayName="ItemList"),		// 아이템 리스트 보임, 3버튼 숨김
 };
 
 
@@ -44,7 +45,7 @@ public:
 	bool TryCancelSubMenu(); // 서브메뉴가 열려있으면 닫기 - 취소 입력 처리용
 	
 	UFUNCTION(BlueprintCallable)
-	bool IsAnySubMenuOpen() const; // 서브메뉴 열림 여뷰 - PC에서 분기
+	bool IsSubMenuOpen() const; // 서브메뉴 열림 여뷰 - PC에서 분기
 	
 	// --- 델리게이트 ---
 	UPROPERTY(BlueprintAssignable)
@@ -71,6 +72,10 @@ protected:
 	
 	UPROPERTY(meta = (BindWidget))
 	UButton* Btn_Item;
+	
+	// 3버튼을 담는 컨테이너
+	UPROPERTY(meta=(BindWidget))
+	UWidget* MainButtonsRoot = nullptr;		// 3버튼을 한 번에 숨기기 위한 루트 위젯
 	
 	// --- 하위 패널 (하위 위젯들) --- 	
 	UPROPERTY(meta = (BindWidget))
@@ -104,19 +109,12 @@ protected:
 	TSubclassOf<UBattleSkillSlotWidget> SkillSlotClass;
 private:
 	// --- 함수 ---
-	// 메인 버튼 3개를 한 번에 활성/비활성
-	void SetMainButtonsEnabled(bool bEnabled);
 	
-	// 현재 패널 상태를 위젯에 반영
-	void ApplySubPanelState(); // SkillList/ItemList 표시 및 버튼 활성 상태를 한 곳에서 갱신
+	// 현재 뷰 상태를 Visibility에 반영
+	void ApplyView(); // Main/SkillList/ItemList 상태에 따라 버튼/리스트 Visibility를 일괄 갱신
 	
-	// 현재 서브패널 상태 (메인/스킬/아이템)
-	UPROPERTY()
-	EActionMenuSubPanel CurrentSubPanel = EActionMenuSubPanel::Main; // 어떤 리스트가 열려있는지 추적
-	
-	// 행동이 진행 중이면 메인 버튼 잠금 유지 - 스킬 선택 직후 등
-	UPROPERTY()
-	bool bMainButtonsLocked = false;
+	// 메인 버튼 3개를 한 번에 Visible/Collapsed
+	void SetMainButtonsVisibility(ESlateVisibility NewVis);
 	
 	
 	// --- 변수 ---
@@ -125,6 +123,9 @@ private:
 	
 	UPROPERTY()
 	TArray<TObjectPtr<UBattleSkillSlotWidget>> SpawnedSkillSlots;
+	
+	UPROPERTY()
+	EActionMenuView CurrentView = EActionMenuView::Main;	// 현재 메뉴 뷰 상태(메인/스킬리스트/아이템리스트)
 	
 	bool bIsFollowingUnit;
 };

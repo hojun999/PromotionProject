@@ -391,7 +391,28 @@ void ABattlePlayerController::Input_ClickConfirmTarget()
 void ABattlePlayerController::Input_CancelTarget()
 {
 	if (!BattleSub) return;
-	if (BattleSub->GetCurrentState() != EBattleState::TargetSelection) return;
-	
-	if (BattleSub) BattleSub->CancelTargetSelection();
+
+	// 타겟 선택 중이면 기존 로직 유지
+	if (BattleSub->GetCurrentState() == EBattleState::TargetSelection)
+	{
+		BattleSub->CancelTargetSelection();
+		return;
+	}
+
+	// ActionInput이면: 스킬/아이템 리스트가 열려있다면 닫기
+	if (BattleSub->GetCurrentState() == EBattleState::ActionInput)
+	{
+		if (!BattleHUD) CacheBattleHUD();
+		if (BattleHUD)
+		{
+			if (UBattleActionMenu* Menu = BattleHUD->GetActionMenuWidget())
+			{
+				if (Menu->TryCancelSubMenu())
+				{
+					ApplyInputMode_GameAndUI(Menu, true);
+					return;
+				}
+			}
+		}
+	}
 }

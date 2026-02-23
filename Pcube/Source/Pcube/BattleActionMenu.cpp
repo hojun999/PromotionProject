@@ -35,29 +35,61 @@ void UBattleActionMenu::NativeConstruct()
 		ItemListWidget->SetVisibility(ESlateVisibility::Collapsed);
 	}
 	
-	CurrentSubPanel = EActionMenuSubPanel::Main;
-	bMainButtonsLocked = false;
-	ApplySubPanelState();
+	// 초기 상태: 3버튼 보임, 리스트 숨김
+	CurrentView = EActionMenuView::Main;
+	ApplyView();
 }
+
+void UBattleActionMenu::SetMainButtonsVisibility(ESlateVisibility NewVis)
+{
+	// 버튼3개를 Visibility로 숨기거나 보여주는 함수
+	if (MainButtonsRoot)
+	{
+		MainButtonsRoot->SetVisibility(NewVis);
+		return;
+	}
+	
+	// 컨테이너가 없으면 개별 버튼 토글로 fallback
+	if (Btn_Attack) Btn_Attack->SetVisibility(NewVis);
+	if (Btn_Skill)  Btn_Skill->SetVisibility(NewVis);
+	if (Btn_Item)   Btn_Item->SetVisibility(NewVis);
+}
+
+void UBattleActionMenu::ApplyView()
+{
+	// View 상태에 따라 3버튼과 리스트들의 Visibility를 일괄 갱신
+	if (!SkillListWidget || !ItemListWidget) return;
+	
+	switch (CurrentView)
+	{
+	case EActionMenuView::Main:
+		SetMainButtonsVisibility(ESlateVisibility::Visible);
+		SkillListWidget->SetVisibility(ESlateVisibility::Collapsed);
+		ItemListWidget->SetVisibility(ESlateVisibility::Collapsed);
+		break;
+
+	case EActionMenuView::SkillList:
+		SetMainButtonsVisibility(ESlateVisibility::Collapsed);
+		SkillListWidget->SetVisibility(ESlateVisibility::Visible);
+		ItemListWidget->SetVisibility(ESlateVisibility::Collapsed);
+		break;
+
+	case EActionMenuView::ItemList:
+		SetMainButtonsVisibility(ESlateVisibility::Collapsed);
+		SkillListWidget->SetVisibility(ESlateVisibility::Collapsed);
+		ItemListWidget->SetVisibility(ESlateVisibility::Visible);
+		break;
+	}
+}
+
 
 void UBattleActionMenu::ShowMenu(ABattleAllyUnit* TargetUnit)
 {
 	CurrentUnit = TargetUnit;
-
-	if (SkillListWidget)
-	{
-		SkillListWidget->SetVisibility(ESlateVisibility::Collapsed);
-	}
 	
-	if (ItemListWidget)
-	{
-		ItemListWidget->SetVisibility(ESlateVisibility::Collapsed);
-	}
-	
-	// 턴 시작마다 UI 상태 리셋
-	CurrentSubPanel = EActionMenuSubPanel::Main;
-	bMainButtonsLocked = false;
-	ApplySubPanelState();
+	// 턴 시작마다 메인 화면으로 리셋(=메인 버튼 다시 보이게)
+	CurrentView = EActionMenuView::Main; // // 새 턴에는 항상 메인으로
+	ApplyView();
 	
 	// 서브 메뉴들은 일단 숨김
 	
@@ -73,54 +105,23 @@ void UBattleActionMenu::ShowMenu(ABattleAllyUnit* TargetUnit)
 	SetVisibility(ESlateVisibility::Visible);
 }
 
-void UBattleActionMenu::SetMainButtonsEnabled(bool bEnabled)
-{
-	// 메인 버튼 3개 동시 잠금/해제
-	if (Btn_Attack) Btn_Attack->SetIsEnabled(bEnabled);
-	if (Btn_Skill) Btn_Skill->SetIsEnabled(bEnabled);
-	if (Btn_Item) Btn_Item->SetIsEnabled(bEnabled);
-}
 
-void UBattleActionMenu::ApplySubPanelState()
+bool UBattleActionMenu::IsSubMenuOpen() const
 {
-	// 패널 표시 + 메인 버튼 활성 조건을 단일 함수에서 관리
-	if (SkillListWidget)
-	{
-		SkillListWidget->SetVisibility(CurrentSubPanel == EActionMenuSubPanel::SkillList
-			? ESlateVisibility::Visible
-			: ESlateVisibility::Collapsed);
-	}
-	
-	if (ItemListWidget)
-	{
-		ItemListWidget->SetVisibility(CurrentSubPanel == EActionMenuSubPanel::ItemList
-			? ESlateVisibility::Visible
-			: ESlateVisibility::Collapsed);
-	}
-	
-	// 메인 버튼은 서브 패널이 Main이고 잠금이 없을 때만 활성화
-	const bool bEnableMain = (CurrentSubPanel == EActionMenuSubPanel::Main) && !bMainButtonsLocked;
-	SetMainButtonsEnabled(bEnableMain);
-}
-
-bool UBattleActionMenu::IsAnySubMenuOpen() const
-{
-	// PC에서 ESC 처리 분기용
-	return CurrentSubPanel == EActionMenuSubPanel::SkillList
-		|| CurrentSubPanel == EActionMenuSubPanel::ItemList;
+	// 스킬/아이템 리스트가 열려있는지 여부(ESC 취소 분기용)
+	return CurrentView == EActionMenuView::SkillList || CurrentView == EActionMenuView::ItemList;
 }
 
 bool UBattleActionMenu::TryCancelSubMenu()
 {
 	// ESC로 서브메뉴 취소 - 닫고 메인 버튼 복구
-	if (!IsAnySubMenuOpen())
+	if (!IsSubMenuOpen())
 	{
 		return false;
 	}
 	
-	CurrentSubPanel = EActionMenuSubPanel::Main;
-	bMainButtonsLocked = false; // 취소이므로 잠금 해제
-	ApplySubPanelState();
+	CurrentView = EActionMenuView::Main;
+	ApplyView();
 	return true;
 }
 
@@ -169,24 +170,16 @@ void UBattleActionMenu::OnAttackClicked()
 {
 	
 	UE_LOG(LogTemp, Warning, TEXT("[ActionMenu] Attack clicked."));
-	
-	// 공격 선택 순간부터 입력 잠금(중복 클릭 방지)
-	bMainButtonsLocked = true; // // 공격 확정 ~ 타겟 선택/실행 동안 잠금
-	CurrentSubPanel = EActionMenuSubPanel::Main;
-	ApplySubPanelState();
-	
+	// 공격은 PC에서 HUD->HideActionMenu() 호출 중이므로 여기서는 브로드캐스트만
 	OnActionRequested.Broadcast(BasicAttackData);
 }
 
 void UBattleActionMenu::OnSkillMenuClicked()
 {
-	if (!SkillListWidget) return;
-	
-	// 스킬 메뉴는 "열기"만 지원(열린 상태에서 버튼은 disabled라 다시 클릭으로 닫기 불가)
-	bMainButtonsLocked = true;                 // // 스킬 메뉴 열린 동안 메인 버튼 잠금
-	CurrentSubPanel = EActionMenuSubPanel::SkillList;
-	ApplySubPanelState();
-	
+	// 스킬 버튼 클릭 -> 메인 3버튼 숨기고 스킬 리스트 표시
+	CurrentView = EActionMenuView::SkillList; // // 스킬 리스트 화면 진입
+	ApplyView();
+
 	RebuildSkillList();
 }
 
@@ -194,12 +187,14 @@ void UBattleActionMenu::HandleSkillSlotClicked(USkillDataAsset* Skill)
 {
 	if (!IsValid(Skill)) return;
 	
-	// 선택 후 리스트 닫기
-	CurrentSubPanel = EActionMenuSubPanel::Main;
+	// 스킬 선택은 확정이므로, 리스트만 닫고 메인 버튼을 다시 보여주지 않음
+	// -> 공격 버튼과 동일하게 메뉴 자체를 숨겨서 중복 입력을 근본 차단
+	CurrentView = EActionMenuView::Main; // 다음번 ShowMenu에서 정상 복구될 수 있게 내부 상태는 메인으로
+	ApplyView();
 
-	bMainButtonsLocked = true; // 스킬 확정 이후 전투 상태 전환까지 잠금 유지
-	ApplySubPanelState();
-	
+	bIsFollowingUnit = false;                 // 타겟 선택/연출 동안 UI 위치 추적 중단
+	SetVisibility(ESlateVisibility::Collapsed); // 스킬 확정 후 액션 메뉴 숨김(중복 클릭 방지)
+
 	OnSkillRequested.Broadcast(Skill);
 }
 
@@ -207,13 +202,11 @@ void UBattleActionMenu::HandleSkillSlotClicked(USkillDataAsset* Skill)
 
 void UBattleActionMenu::OnItemMenuClicked()
 {
-	if (!ItemListWidget) return;
+	// 아이템 버튼 클릭 -> 메인 3버튼 숨기고 아이템 리스트 표시
+	CurrentView = EActionMenuView::ItemList; // // 아이템 리스트 화면 진입
+	ApplyView();
 
-	bMainButtonsLocked = true;
-	CurrentSubPanel = EActionMenuSubPanel::ItemList;
-	ApplySubPanelState();
-	
-	OnItemMenuRequested.Broadcast();
+	OnItemMenuRequested.Broadcast(); // 아이템 리스트 빌드는 추후(인벤 구현 후) 연결
 }
 
 void UBattleActionMenu::RebuildSkillList()
