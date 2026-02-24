@@ -263,10 +263,14 @@ void ABattlePlayerController::HandleBattleStateChanged(EBattleState NewState)
 	switch (NewState)
 	{
 	case EBattleState::TargetSelection:
+		if (!BattleHUD) CacheBattleHUD();
+		if (BattleHUD) BattleHUD->HideActionMenu(); // 타겟 선택 중에는 액션 메뉴 숨기기
 		ApplyInputMode_GameOnly(true);
 		break;
 		
 	case EBattleState::ActionExecute:
+		if (!BattleHUD) CacheBattleHUD();
+		if (BattleHUD) BattleHUD->HideActionMenu(); // 연출 중에 입력/UI 차단
 		ApplyInputMode_GameOnly(false);
 		break;
 		
@@ -415,4 +419,6 @@ void ABattlePlayerController::Input_CancelTarget()
 			}
 		}
 	}
+	
+	// 나머지 상태에는 아무것도 안함
 }
