@@ -5,9 +5,8 @@
 #include "AllyStatusEntryWidget.h"
 #include "BattleBaseUnit.h"
 #include "Components/HorizontalBox.h"
-#include "Components/HorizontalBoxSlot.h"
 #include "GameFramework/PlayerController.h"
-#include "Tests/ToolMenusTestUtilities.h"
+
 
 void UAllyStatusPanelWidget::InitParty(const TArray<AActor*>& AllyActors)
 {

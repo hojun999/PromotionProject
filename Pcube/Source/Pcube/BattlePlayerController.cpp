@@ -178,7 +178,20 @@ void ABattlePlayerController::FocusViewTarget(AActor* Target, float BlendTime)
 
 void ABattlePlayerController::FocusDefaultBattleCamera(float BlendTime)
 {
-	// TODO: default camera로 전환
+	// 1. 월드에서 "DefaultBattleCamera" 태그를 가진 액터 탐색
+	TArray<AActor*> FoundCameras;
+	UGameplayStatics::GetAllActorsWithTag(GetWorld(), FName("DefaultBattleCamera"), FoundCameras);
+
+	if (FoundCameras.Num() > 0)
+	{
+		AActor* DefaultCam = FoundCameras[0];
+		// 2. 해당 카메라로 뷰 타겟을 전환
+		SetViewTargetWithBlend(DefaultCam, BlendTime);
+	}
+	else
+	{
+		UE_LOG(LogTemp, Warning, TEXT("BattleUI: 'DefaultBattleCamera' 태그를 가진 액터를 찾을 수 없습니다!"));
+	}
 }
 
 void ABattlePlayerController::ApplyInputMode_GameOnly(bool bShowCursor)
@@ -272,7 +285,12 @@ void ABattlePlayerController::HandleBattleStateChanged(EBattleState NewState)
 		if (!BattleHUD) CacheBattleHUD();
 		if (BattleHUD) BattleHUD->HideActionMenu(); // 연출 중에 입력/UI 차단
 		ApplyInputMode_GameOnly(false);
+		FocusDefaultBattleCamera(0.5f);
 		break;
+		
+	// case EBattleState::ActionInput:
+		// 다시 입력 상태가 되면 현재 턴인 유닛을 비추도록 처리
+		
 		
 	default:
 		break;
@@ -308,9 +326,30 @@ void ABattlePlayerController::HandleBattleFinished(EBattleResult Result)
 	{
 		if (Transfer)
 		{
-			Transfer->MarkLastEncounterDefeated();
+			const FName EncounterID = Transfer->GetPendingEncounterID();
+			if (EncounterID == NAME_None)
+			{
+				UE_LOG(LogTemp, Error, TEXT("[Battle] Victory but Pending EncounterID is None."));
+			}
+			else
+			{
+				// 드랍 생성 + 저장
+				TArray<FLootStack> Loot = Transfer->GenerateLootFromPendingConfig(8);
+				
+				if (Loot.Num() > 0)
+				{
+					Transfer->SetEncounterLoot(EncounterID, Loot);
+				}
+				else
+				{
+					// Loot가 진짜 0이면 corpse 스폰 안 하게 처리
+					Transfer->MarkEncounterLooted(EncounterID);
+				}
+				
+				Transfer->MarkLastEncounterDefeated();
+			}
 			const FName ReturnWorld = Transfer->GetReturnWorldLevelName();
-			Transfer->ClearPendingEncounter(); // 재사용/중복 기록 방지 (권장)
+			Transfer->ClearPendingEncounter();
 			
 			FTimerHandle TH;
 			GetWorld()->GetTimerManager().SetTimer(TH, [this, ReturnWorld]()

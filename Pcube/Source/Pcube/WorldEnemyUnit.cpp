@@ -38,7 +38,6 @@ void AWorldEnemyUnit::BeginPlay()
 {
 	Super::BeginPlay();
 	
-	
 	// 로드 직후 즉시 오버랩 전부 꺼두기
 	if (DetectSphere)
 	{
@@ -66,8 +65,10 @@ void AWorldEnemyUnit::BeginPlay()
 			
 			if (bDefeated)
 			{
-				ConvertToCorpse();
-				return; // ★ 여기서 끝내야 함
+				if (TrySpawnCorpseIfDefeated())
+				{
+					return;
+				}
 			}
 		}
 	}
@@ -208,9 +209,25 @@ void AWorldEnemyUnit::StartEncounter(AActor* PlayerActor)
 	Transfer->SetReturnPoint(WorldLevelName, PlayerActor->GetActorLocation(), PlayerActor->GetActorRotation());
 	
 	// 4. 적 스폰 정보 저장
-	if (SpawnData->SpawnGroups.Num() > 0)
+	const FEnemySpawnGroup* Group = nullptr;
+	for (const FEnemySpawnGroup& G : SpawnData->SpawnGroups)
 	{
-		Transfer->InitEnemyBattleInfo(SpawnData->SpawnGroups[0].EnemyList);
+		if (G.EncounterID == EncounterID)
+		{
+			Group = &G;
+			break;
+		}
+	}
+	if (!Group && SpawnData->SpawnGroups.Num() > 0)
+	{
+		Group = &SpawnData->SpawnGroups[0];
+		UE_LOG(LogTemp, Warning, TEXT("[WorldEnemy] SpawnGroup not found by EncounterID=%s. Fallback to index0."), *EncounterID.ToString());
+	}
+	
+	if (Group)
+	{
+		Transfer->InitEnemyBattleInfo(Group->EnemyList);
+		Transfer->SetPendingLootConfig(Group->LootRolls, Group->LootTable, Group->GuaranteedLoot);
 	}
 
 	// 5. 전투 레벨 이동
@@ -325,4 +342,60 @@ void AWorldEnemyUnit::Loot()
 	
 	// 프로토타입: 루팅 후 제거
 	Destroy();
+}
+
+bool AWorldEnemyUnit::TrySpawnCorpseIfDefeated()
+{
+	if (EncounterID == NAME_None) return false;
+	
+	UGameInstance* GI = GetGameInstance();
+	if (!GI) return false;
+	
+	UBattleInfoTransferSubsystem* Transfer = GI->GetSubsystem<UBattleInfoTransferSubsystem>();
+	if (!Transfer) return false;
+	
+	if(Transfer->IsEncounterLooted(EncounterID))
+	{
+		Destroy();
+		return true;
+	}
+	
+	// 잔여 루팅 복원
+	TArray<FLootStack> Loot;
+	Transfer->TryGetEncounterLoot(EncounterID, Loot);
+	
+	// if (!bHasSavedLoot)
+	// {
+	// 	UE_LOG(LogTemp, Warning, TEXT("[WorldEnemy] Defeated but no saved loot. EncounterID=%s (Did battle call SetEncounterLoot?)"),
+	// 		*EncounterID.ToString());
+	// 	// Loot 비어있는 상태로 스폰할지/아예 스폰 안할지는 선택
+	// 	// 지금은 스폰하도록 두면 디버깅 쉬울듯
+	// }
+	
+	// 시체 스폰
+	if (LootCorpseClass)
+	{
+		FActorSpawnParameters SpawnParams;
+		SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+		
+		ALootCorpseActor* Corpse = GetWorld()->SpawnActor<ALootCorpseActor>(LootCorpseClass, GetActorTransform(), SpawnParams);
+		if (Corpse)
+		{
+			// 시체 메쉬 공급 방식:
+			// 1. UnitData->DeadStaticMesh 쓰는 방식 유지 - 적마다 다른 시체
+			// 2. 혹은 LootCorpseActor BP에 디폴트 메시 박아두고 여기서는 nullptr 넘기기
+			UStaticMesh* CorpseMesh = nullptr;
+			
+			// UnitData는 base/derived 중 하나로 통일 필요 
+			if (UnitData && UnitData->DeadStaticMesh)
+			{
+				CorpseMesh = UnitData->DeadStaticMesh;
+			}
+			
+			Corpse->InitCorpse(EncounterID, CorpseMesh, Loot);
+		}
+	}
+	
+	Destroy();
+	return true;
 }

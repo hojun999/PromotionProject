@@ -5,6 +5,7 @@
 #include "BattleAllyUnit.h"
 #include "BattleInfoTransferSubsystem.h"
 #include "UnitDataAsset.h"
+#include "EquipmentSubsystem.h"
 
 void UBattleControlSubsystem::OnWorldBeginPlay(UWorld& InWorld)
 {
@@ -34,6 +35,7 @@ void UBattleControlSubsystem::SpawnBattleUnits()
 	
 	// 1. BattleInfoTransferSubsystem에서 데이터 가져오기
 	UBattleInfoTransferSubsystem* BattleInfoSubsystem = GI ? GI->GetSubsystem<UBattleInfoTransferSubsystem>() : nullptr;
+	UEquipmentSubsystem* EquipmentSubsystem = GI ? GI->GetSubsystem<UEquipmentSubsystem>() : nullptr;
 	
 	if (!BattleInfoSubsystem)
 	{
@@ -42,6 +44,11 @@ void UBattleControlSubsystem::SpawnBattleUnits()
 	}
 	
 	// 2. 아군 유닛 스폰
+	// 장착 시스템 배열 준비(파티 수에 맞춤)
+	if (EquipmentSubsystem)
+	{
+		EquipmentSubsystem->EnsurePartySize(BattleInfoSubsystem->BattleInfo.AlliesToSpawn.Num());
+	}
 	if (BattleInfoSubsystem->BattleInfo.AlliesToSpawn.Num() == 0)
 	{
 		UE_LOG(LogTemp, Error, TEXT("아군 데이터가 비어있습니다!"));
@@ -57,6 +64,18 @@ void UBattleControlSubsystem::SpawnBattleUnits()
 			
 			// 파티 인덱스 지정
 			NewAlly->PartyIndex = AllyIndex;
+
+			// 무기(고정 장비) 초기 세팅: 유닛 데이터에 DefaultWeapon이 있고, 아직 장착되지 않았다면 장착
+			if (EquipmentSubsystem && NewAlly->UnitData && NewAlly->UnitData->DefaultWeapon)
+			{
+				if (!EquipmentSubsystem->GetEquippedWeapon(AllyIndex))
+				{
+					EquipmentSubsystem->EquipWeapon(AllyIndex, NewAlly->UnitData->DefaultWeapon);
+				}
+			}
+
+			// 무기 비주얼(캐릭터 소켓에 WeaponMesh 부착) 갱신
+			NewAlly->RefreshWeaponVisual();
 			
 			// 저장된 HP 적용
 			const float SavedHP = BattleInfoSubsystem->GetSavedHP(AllyIndex);
@@ -73,8 +92,18 @@ void UBattleControlSubsystem::SpawnBattleUnits()
 				if (NewAlly->CurrentHP <= 0.f){ NewAlly->Die(); }
 			}
 			
-			UE_LOG(LogTemp, Log, TEXT("아군 스폰 성공: %s (PartyIndex=%d SavedHP=%.1f)"),
-			*NewAlly->GetName(), AllyIndex, SavedHP);
+			const int32 SavedSP = BattleInfoSubsystem->GetSavedSP(AllyIndex);
+			if (SavedSP >= 0)
+			{
+				const int32 MaxSP = NewAlly->GetMaxSkillPoints();
+				NewAlly->CurrentSkillPoints = FMath::Clamp(SavedSP, 0, MaxSP);
+				
+				// UI 갱신 - 스킬포인트 아이콘/수치 업데이트
+				NewAlly->OnSkillPointsChanged.Broadcast(NewAlly->CurrentSkillPoints, MaxSP);
+			}
+			
+			UE_LOG(LogTemp, Log, TEXT("아군 스폰 성공: %s (PartyIndex=%d SavedHP=%.1f SavedSP=%d/%d)"),
+			*NewAlly->GetName(), AllyIndex, SavedHP, NewAlly->CurrentSkillPoints, NewAlly->GetMaxSkillPoints());
 		}
 		else
 		{
@@ -500,6 +529,12 @@ void UBattleControlSubsystem::RequestUseSkill(USkillDataAsset* Skill)
 	ABattleBaseUnit* Attacker = Cast<ABattleBaseUnit>(CurrentActionUnit);
 	if (!IsValid(Attacker) || !IsValid(Skill)) return;
 
+	if (!Attacker->CanUseSkill(Skill))
+	{
+		UE_LOG(LogTemp, Warning, TEXT("[SkillPoint] Not enough points (blocked before selection)."));
+		return; // ActionInput 유지
+	}
+	
 	switch (Skill->TargetType)
 	{
 	case ESkillTargetRule::SingleEnemy:
@@ -773,7 +808,7 @@ void UBattleControlSubsystem::FinishBattle(EBattleResult Result)
 	}
 	bBattleResolved = true;
 	
-	// 현재 아군 유닛들의 HP 저장
+	// 현재 아군 유닛들의 HP/SP 저장
 	if (UWorld* World = GetWorld())
 	{
 		if (UGameInstance* GI = World->GetGameInstance())
@@ -789,10 +824,11 @@ void UBattleControlSubsystem::FinishBattle(EBattleResult Result)
 					
 					if (Unit->PartyIndex != INDEX_NONE)
 					{
-						TransferSubsystem->SetSavedHP(Unit->PartyIndex, Unit->CurrentHP);
+						TransferSubsystem->SetSavedHP(Unit->PartyIndex, Unit->CurrentHP);					// 현재 HP 저장
+						TransferSubsystem->SetSavedSP(Unit->PartyIndex, Unit->CurrentSkillPoints);	// 현재 SP 저장
 						
-						UE_LOG(LogTemp, Warning, TEXT("[PartyHP] Saved idx=%d hp=%.1f"),
-						Unit->PartyIndex, Unit->CurrentHP);
+						UE_LOG(LogTemp, Warning, TEXT("[PartySP] Saved idx=%d sp=%d/%d"),
+							Unit->PartyIndex, Unit->CurrentSkillPoints, Unit->GetMaxSkillPoints());
 					}
 				}
 			}

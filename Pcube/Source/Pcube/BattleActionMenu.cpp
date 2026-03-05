@@ -93,7 +93,6 @@ void UBattleActionMenu::ShowMenu(ABattleAllyUnit* TargetUnit)
 	
 	// 서브 메뉴들은 일단 숨김
 	
-	
 	// 턴 시작 때마다 스킬 목록 갱신
 	RebuildSkillList();
 	
@@ -168,10 +167,13 @@ void UBattleActionMenu::NativeTick(const FGeometry& MyGeometry, float InDeltaTim
 
 void UBattleActionMenu::OnAttackClicked()
 {
-	
 	UE_LOG(LogTemp, Warning, TEXT("[ActionMenu] Attack clicked."));
+	
 	// 공격은 PC에서 HUD->HideActionMenu() 호출 중이므로 여기서는 브로드캐스트만
-	OnActionRequested.Broadcast(BasicAttackData);
+	if (IsValid(BasicAttackData))
+	{
+		OnActionRequested.Broadcast(BasicAttackData);
+	}
 }
 
 void UBattleActionMenu::OnSkillMenuClicked()
@@ -187,18 +189,32 @@ void UBattleActionMenu::HandleSkillSlotClicked(USkillDataAsset* Skill)
 {
 	if (!IsValid(Skill)) return;
 	
+	// SP가 부족하면 메시지 출력 + 스킬리스트 유지
+	if (!IsValid(CurrentUnit) || !CurrentUnit->CanUseSkill(Skill))
+	{
+		const int32 CurSP = IsValid(CurrentUnit) ? CurrentUnit->GetCurrentSkillPoints() : 0;
+		const int32 MaxSP = IsValid(CurrentUnit) ? CurrentUnit->GetMaxSkillPoints() : 0;
+		const int32 Cost = Skill->SkillPointCost;
+		
+		const FString Msg = FString::Printf(
+			TEXT("스킬 포인트가 부족합니다: %s (필요 %d / 현재 %d/%d)"),
+			*Skill->SkillName, Cost, CurSP, MaxSP
+			);
+		
+		ShowTempFeedbackMessage(Msg, 1.7f);
+		return; // 리스트/뷰 상태 유지
+	}
+	
 	// 스킬 선택은 확정이므로, 리스트만 닫고 메인 버튼을 다시 보여주지 않음
 	// -> 공격 버튼과 동일하게 메뉴 자체를 숨겨서 중복 입력을 근본 차단
 	CurrentView = EActionMenuView::Main; // 다음번 ShowMenu에서 정상 복구될 수 있게 내부 상태는 메인으로
 	ApplyView();
-
-	bIsFollowingUnit = false;                 // 타겟 선택/연출 동안 UI 위치 추적 중단
-	SetVisibility(ESlateVisibility::Collapsed); // 스킬 확정 후 액션 메뉴 숨김(중복 클릭 방지)
+	
+	// bIsFollowingUnit = false;                 // 타겟 선택/연출 동안 UI 위치 추적 중단
+	// SetVisibility(ESlateVisibility::Collapsed); // 스킬 확정 후 액션 메뉴 숨김(중복 클릭 방지)
 
 	OnSkillRequested.Broadcast(Skill);
 }
-
-
 
 void UBattleActionMenu::OnItemMenuClicked()
 {
@@ -238,4 +254,14 @@ void UBattleActionMenu::RebuildSkillList()
 	}
 }
 
-
+void UBattleActionMenu::ShowTempFeedbackMessage(const FString& Message, float Duration) const
+{
+#if !UE_BUILD_SHIPPING
+	if (GEngine)
+	{
+		// 같은 키로 계속 갱신되게 해서 스팸 방지
+		const int32 MsgKey = 77701; // "UI Feedback" 전용 키
+		GEngine->AddOnScreenDebugMessage(MsgKey, Duration, FColor::Yellow, Message);
+	}
+#endif
+}

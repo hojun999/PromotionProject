@@ -3,6 +3,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "LootTypes.h"
 #include "Engine/DataAsset.h"
 #include "SpawnDataAsset.generated.h"
 
@@ -65,6 +66,16 @@ struct FEnemySpawnGroup
 	// 해당 그룹에 포함된 모든 적 유닛 리스트 (개체수 & 위치 정보)
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Spawn")
 	TArray<FUnitSpawnInfo> EnemyList;
+	
+	// --- Loot ---
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Loot", meta=(ClampMin="0"))
+	int32 LootRolls = 2;
+	
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Loot")
+	TArray<FLootDropEntry> LootTable;
+	
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Loot")
+	TArray<FLootStack> GuaranteedLoot;
 };
 
 UCLASS()

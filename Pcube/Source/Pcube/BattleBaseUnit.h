@@ -8,6 +8,7 @@
 #include "GameFramework/SpringArmComponent.h"
 #include "SkillDataAsset.h"
 #include "UnitDataAsset.h"
+#include "BattleDamageTextActor.h"
 #include "BattleBaseUnit.generated.h"
 
 USTRUCT()
@@ -58,7 +59,7 @@ struct FSkillRuntimeSpec
 	float DamageMultiplier = 1.f;
 	
 	UPROPERTY()
-	int32 Hitcount = 1; // 타격 횟수
+	int32 HitCount = 1; // 타격 횟수
 	
 	// --- projectile ---
 	UPROPERTY()
@@ -172,6 +173,29 @@ public:
 	// 컴포넌트
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="UI")
 	class USceneComponent* UIAnchorPoint;
+
+	// --- 무기 비주얼(캐릭터 손 소켓에 부착되는 무기 본체 StaticMesh) ---
+	UFUNCTION(BlueprintCallable, Category="Visual|Weapon")
+	void RefreshWeaponVisual();
+	
+	// --- 전투 데미지 숫자 표시(월드 스페이스 텍스트 액터) ---
+	// 비어있으면 스폰하지 않음. 기본값은 ABattleDamageTextActor로 설정(생성자에서 세팅)
+	UPROPERTY(EditDefaultsOnly, Category="UI")
+	TSubclassOf<ABattleDamageTextActor> DamageTextActorClass;
+	
+	// --- 장비 비주얼(무기/파츠) ---
+	// 무기 본체 메시(WeaponDataAsset->WeaponMesh)를 표시하는 컴포넌트.
+	// 파츠는 이 컴포넌트의 소켓(WeaponDataAsset->ModSlots[].SocketName)에 런타임으로 부착한다.
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Equipment|Visual")
+	TObjectPtr<UStaticMeshComponent> WeaponMeshComp = nullptr;
+
+	// 캐릭터 스켈레탈 메시(손 등)에 무기 본체를 붙일 소켓.
+	// 비워두면 Mesh Root에 KeepRelativeTransform으로 붙는다.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Equipment|Visual")
+	FName WeaponHoldSocketName = NAME_None;
+
+	UFUNCTION(BlueprintCallable, Category="Equipment|Visual")
+	void RefreshEquipmentVisuals();
 	
 	// --- 전투 핵심 로직
 	void FinishAction(); // 행동 종료 시 호출할 함수
@@ -208,11 +232,13 @@ public:
 	
 	// 문자열 비교 실수 방지용 상수
 	static const FName Notify_Hit; // 타격/효과 1회 적용 트리거
+	static const FName Notify_Fire; // 투사체 발사 트리거. 기존 Hit도 호환 처리.
 	static const FName Notify_Effect; // 한 번에 전부 적용 같은 확장 트리거
 	
 protected:
 	// Called when the game starts or when spawned
 	virtual void BeginPlay() override;
+	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Visual")
 	UStaticMeshComponent* StaticMeshComp;
@@ -227,12 +253,18 @@ protected:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Camera")
 	UCameraComponent* CameraComp;
 	
+	
+	
 	// 애니메이션 노티파이로부터 호출될 함수
 	UFUNCTION()
 	void HandleHitNotify(FName NotifyName, const FBranchingPointNotifyPayload& Payload);
 	
 	UFUNCTION()
 	void OnActionMontageEnded(UAnimMontage* Montage, bool bInterrupted);
+
+	// 장비 변경 이벤트(월드/전투 공통으로 같은 EquipmentSubsystem을 씀)
+	UFUNCTION()
+	void HandleEquipmentChanged(int32 ChangedPartyIndex);
 	
 	// 마우스 클릭 시 호출되는 엔진 기본 이벤트
 	virtual void NotifyActorOnClicked(FKey ButtonPressed = EKeys::LeftMouseButton) override;
@@ -264,6 +296,13 @@ private:
 	UPROPERTY()
 	bool bActionMontageEnded = false; // 몽타주 종료 여부 (투사체 대기 시 FinishAction 지연용)
 	
+	FTimerHandle NoMontageActionTimerHandle;
+
+	UAnimMontage* ResolveActionMontage(const USkillDataAsset* Skill) const;
+	FName ResolveMuzzleSocketName(const USkillDataAsset* Skill) const;
+	float GetEnemyNoMontageDelaySeconds() const;
+	void HandleNoMontageActionDelayExpired();
+	
 	void TryFinishAction(); // 몽타주 종료 + 투사체 전부 종료면 FinishAction 호출
 	
 	// --- 투사체 ---
@@ -279,6 +318,10 @@ private:
 	FSkillRuntimeModifier GetSkillRuntimeModifier(const USkillDataAsset* Skill) const; // 부품 시스템 훅
 	FSkillRuntimeSpec BuildRuntimeSpec(const USkillDataAsset* Skill) const;
 	
+	// SocketName -> 파츠 메시 컴포넌트
+	UPROPERTY(Transient)
+	TMap<FName, TObjectPtr<UStaticMeshComponent>> PartMeshBySocket;
+	
 	//float GetMaxHP() const;
 	float GetEffectiveAttackPower() const;
 	
@@ -287,5 +330,18 @@ private:
 	void ApplyOneHit(); // 1타 or 1회 효과 적용
 	void ApplyRemainingHits(); // 남은 타수 일괄 적용
 	void TickBuffDuration_OnActionEnd(); // 본인 행동 종료시 지속턴 감소
+	
+	void SpawnDamageText(float DamageAmount); // TakeDamage에서 호출
+	void TriggerHitReaction(); // TakeDamage에서 호출(아군: 몽타주 / 적: 파티클)
+	
+	// 화면에 전투 처리 결과를 띄우는 공통 함수 - 디버그용 텍스트 출력
+	void ScreenCombatText(ESkillEffectType EffectType, const FString& Text, float Duration = 2.0f) const; // 전투 이벤트 화면 출력
+	
+	// 유닛/스킬 이름을 사람이 읽기 좋은 형태로 만들기 위한 헬퍼
+	static FString GetUnitLabel(const ABattleBaseUnit* Unit); // UnitData->UnitName 우선, 없으면 ActorName
+	static FString GetSkillLabel(const USkillDataAsset* Skill); // SkillName 우선, 없으면 "BasicAttack"
+
+	// 효과 타입별 색상(가독성)
+	static FColor GetEffectColor(ESkillEffectType EffectType); // Damage/Heal/Buff/Stun 별 색상
 	
 };

@@ -128,4 +128,7 @@ private:
 	EActionMenuView CurrentView = EActionMenuView::Main;	// 현재 메뉴 뷰 상태(메인/스킬리스트/아이템리스트)
 	
 	bool bIsFollowingUnit;
+	
+	// 임시 피드백 출력(현재: OnScreenDebugMessage) - 나중에 텍스트 위젯으로 교체하기 위한 훅
+	void ShowTempFeedbackMessage(const FString& Message, float Duration = 1.5f) const; // SP 부족 등 피드백 표시용
 };

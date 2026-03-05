@@ -3,6 +3,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "LootCorpseActor.h"
 #include "WorldBaseUnit.h"
 #include "WorldEnemyUnit.generated.h"
 
@@ -10,9 +11,7 @@ class USpawnDataAsset;
 class UBoxComponent;
 class USphereComponent;
 
-/**
- * 
- */
+
 UCLASS()
 class PCUBE_API AWorldEnemyUnit : public AWorldBaseUnit
 {
@@ -73,8 +72,6 @@ protected:
 	UPROPERTY(VisibleAnywhere)
 	UBoxComponent* InteractBox = nullptr;
 	
-	UPROPERTY(EditAnywhere, Category="Encounter")
-	FName EncounterID = NAME_None;
 	
 	UPROPERTY(BlueprintReadOnly)
 	bool bIsCorpse = false;
@@ -85,4 +82,17 @@ protected:
 private:
 	UPROPERTY(Transient)
 	bool bEncounterLocked = false;
+	
+	// --- 루팅 관련 ---
+protected:
+	UPROPERTY(EditDefaultsOnly, Category="Loot")
+	TSubclassOf<ALootCorpseActor> LootCorpseClass;
+	
+	UPROPERTY(EditAnywhere, Category="Encounter")
+	FName EncounterID = NAME_None;
+	
+	// UPROPERTY(EditAnywhere, Category="Data")
+	// TObjectPtr<UUnitDataAsset> UnitData = nullptr;
+	
+	bool TrySpawnCorpseIfDefeated();
 };

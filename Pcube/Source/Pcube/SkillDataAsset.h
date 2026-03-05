@@ -76,6 +76,18 @@ public:
 	
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Delivery", meta=(EditCondition="DeliveryType==ESkillDeliveryType::Projectile"))
 	FName MuzzleSocketName = TEXT("Muzzle"); // 투사체 발사 소켓(손/무기 소켓)
+
+	// 투사체 스폰 로컬 오프셋(소켓 기준). 손/지팡이 끝에서 살짝 앞으로 빼고 싶을 때 사용
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Delivery", meta=(EditCondition="DeliveryType==ESkillDeliveryType::Projectile"))
+	FVector ProjectileSpawnLocalOffset = FVector::ZeroVector;
+
+	// 다중 투사체일 때 겹치지 않도록 좌우로 벌리는 간격(cm)
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Delivery", meta=(EditCondition="DeliveryType==ESkillDeliveryType::Projectile", ClampMin="0.0"))
+	float ProjectileLateralSpacing = 8.0f;
+
+	// 다중 투사체를 한 프레임에 다 쏘지 않고 순차 발사하는 간격(초). 0이면 동시 스폰
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Delivery", meta=(EditCondition="DeliveryType==ESkillDeliveryType::Projectile", ClampMin="0.0"))
+	float ProjectileSpawnInterval = 0.05f;
 	
 	
 	

@@ -6,6 +6,8 @@
 #include "AllyPartyDataAsset.h"
 #include "Subsystems/GameInstanceSubsystem.h"
 #include "SpawnDataAsset.h"
+#include "LootTypes.h"
+#include "Async/IAsyncTask.h"
 #include "BattleInfoTransferSubsystem.generated.h"
 
 
@@ -17,9 +19,12 @@ struct FPartyMemberRuntimeState
 {
 	GENERATED_BODY()
 	
-	// -1이면 저장된 값 없음 -> 풀피로 스폰
+	
 	UPROPERTY()
-	float SavedHP = -1.f;
+	float SavedHP = -1.f;	// -1이면 저장된 값 없음 -> 풀피로 스폰
+	
+	UPROPERTY()
+	int32 SavedSP = -1;		// -1이면 저장값 없음 -> BaseSkillPoints로 스폰
 };
 
 USTRUCT(BlueprintType)
@@ -64,6 +69,21 @@ struct FEncounterContext
 	
 	UPROPERTY()
 	FName ReturnWorldLevel = NAME_None;
+};
+
+USTRUCT()
+struct FPendingLootConfig
+{
+	GENERATED_BODY()
+	
+	UPROPERTY()
+	int32 LootRolls = 0;
+	
+	UPROPERTY()
+	TArray<FLootDropEntry> LootTable;
+	
+	UPROPERTY()
+	TArray<FLootStack> GuaranteedLoot;
 };
 
 UCLASS()
@@ -114,6 +134,7 @@ public:
 	// 파티는 인덱스 기반으로 저장됨
 	UPROPERTY()
 	TArray<FPartyMemberRuntimeState> AllyRuntimeStates;
+
 	
 private:
 	UPROPERTY()
@@ -121,4 +142,32 @@ private:
 	
 	UPROPERTY()
 	TSet<FName> DefeatedEncounterIds;
+	
+	// --- SP Getter/Setter ---
+public:
+	int32 GetSavedSP(int32 PartyIndex) const;			// 저장된 SP 읽기 (-1이면 없는 상태)
+	void SetSavedSP(int32 PartyIndex, int32 NewSP);		// 현재 SP 저장
+	
+	// --- Loot 관련 로직 ---
+public:
+	bool IsEncounterLooted(FName EncounterID) const; // 루팅 완료 여부 (시체 재생성 방지)
+	bool TryGetEncounterLoot(FName EncounterID, TArray<FLootStack>& OutLoot) const; // 잔여 루팅 조회
+	void SetEncounterLoot(FName EncounterID, TArray<FLootStack> Loot); // 잔여 루팅 저장
+	void ClearEncounterLoot(FName EncounterID); // 잔여 루팅 제거
+	void MarkEncounterLooted(FName EncounterID); // 루팅 완료 처리
+	
+	FName GetPendingEncounterID() const { return PendingEncounter.EncounterID; }
+	void SetPendingLootConfig(int32 InLootRolls, const TArray<FLootDropEntry>& InTable, const TArray<FLootStack>& InGuaranteed);
+	void ClearPendingLootConfig();
+	TArray<FLootStack> GenerateLootFromPendingConfig(int32 MaxSlots = 8) const;
+	
+private:
+	UPROPERTY()
+	TMap<FName, FEncounterLootList> EncounterLootMap; // // EncounterID -> 잔여 루팅 목록
+	
+	UPROPERTY()
+	TSet<FName> LootedEncounterIDs; // 완전히 루팅됨 - 시체 스폰 X
+	
+	UPROPERTY()
+	FPendingLootConfig PendingLootConfig;
 };

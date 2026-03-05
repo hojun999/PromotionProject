@@ -7,22 +7,24 @@
 #include "GameFramework/SpringArmComponent.h"
 #include "Camera/CameraComponent.h"
 #include "GameFramework/CharacterMovementComponent.h"
-#include "Kismet/GameplayStatics.h"
 #include "Components/CapsuleComponent.h"
 
 AWorldAllyUnit::AWorldAllyUnit()
 {
+	// 월드에서 조작하는 플레이어는 기본적으로 파티 0번으로 간주
+	PartyIndex = 0;
+
 	// 카메라 설정 (쿼터뷰 시점)
-	PlayerSpringArm = CreateDefaultSubobject<USpringArmComponent>(TEXT("PlayerSpringArm"));
-	PlayerSpringArm->SetupAttachment(RootComponent);
-	PlayerSpringArm->TargetArmLength = 700.0f;
-	PlayerSpringArm->SetRelativeLocation(FVector(25.0f, 0.0f, 50.f));
-	PlayerSpringArm->SetRelativeRotation(FRotator(-25.0f, 0.0f, 0.0f)); // 시점 고정
-	PlayerSpringArm->bDoCollisionTest = false; // Collision 충돌 시 카메라 줌인 방지
-	PlayerSpringArm->bInheritYaw = false; // 컨트롤러 회전에 의한 카메라 회전 영향 방지
-	
-	PlayerCamera = CreateDefaultSubobject<UCameraComponent>(TEXT("PlayerCamera"));
-	PlayerCamera->SetupAttachment(PlayerSpringArm);
+	// PlayerSpringArm = CreateDefaultSubobject<USpringArmComponent>(TEXT("PlayerSpringArm"));
+	// PlayerSpringArm->SetupAttachment(RootComponent);
+	// PlayerSpringArm->TargetArmLength = 700.0f;
+	// PlayerSpringArm->SetRelativeLocation(FVector(25.0f, 0.0f, 50.f));
+	// PlayerSpringArm->SetRelativeRotation(FRotator(-25.0f, 0.0f, 0.0f)); // 시점 고정
+	// PlayerSpringArm->bDoCollisionTest = false; // Collision 충돌 시 카메라 줌인 방지
+	// PlayerSpringArm->bInheritYaw = false; // 컨트롤러 회전에 의한 카메라 회전 영향 방지
+	//
+	// PlayerCamera = CreateDefaultSubobject<UCameraComponent>(TEXT("PlayerCamera"));
+	// PlayerCamera->SetupAttachment(PlayerSpringArm);
 	
 	// 캐릭터 회전 설정 (마우스가 아닌 이동 방향으로 회전)
 	bUseControllerRotationYaw = false; // 캐릭터가 카메라 방향을 따라가지 않음

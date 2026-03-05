@@ -4,12 +4,18 @@
 #include "BattleBaseUnit.h"
 #include "SkillDataAsset.h"
 #include "UnitDataAsset.h"
+#include "EquipmentSubsystem.h"
+#include "WeaponDataAsset.h"
+#include "WeaponPartDataAsset.h"
+#include "Components/StaticMeshComponent.h"
 #include "Kismet/GameplayStatics.h"
 #include "BattleProjectile.h"
+#include "BattleDamageTextActor.h"
 
 class APlayerState;
 
 const FName ABattleBaseUnit::Notify_Hit(TEXT("Hit"));
+const FName ABattleBaseUnit::Notify_Fire(TEXT("Fire"));
 const FName ABattleBaseUnit::Notify_Effect(TEXT("Effect"));
 
 // Sets default values
@@ -17,6 +23,12 @@ ABattleBaseUnit::ABattleBaseUnit()
 {
 	StaticMeshComp = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("StaticMeshComp"));
 	StaticMeshComp->SetupAttachment(RootComponent);
+	
+	WeaponMeshComp = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("WeaponMeshComp"));
+	WeaponMeshComp->SetupAttachment(RootComponent);
+	WeaponMeshComp->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	WeaponMeshComp->SetGenerateOverlapEvents(false);
+	WeaponMeshComp->SetVisibility(false, true);
 	
 	// ACharacter를 상속받으므로 깁본 skeletalmesh 숨기기
 	// TODO: 이후에 Skeletalmesh 사용할 때 아래 내용 삭제
@@ -48,13 +60,237 @@ ABattleBaseUnit::ABattleBaseUnit()
 	
 	UIAnchorPoint = CreateDefaultSubobject<USceneComponent>(TEXT("UIAnchorPoint"));
 	UIAnchorPoint->SetupAttachment(RootComponent);
+	
+	DamageTextActorClass = ABattleDamageTextActor::StaticClass();
 }
 
 // Called when the game starts or when spawned
 void ABattleBaseUnit::BeginPlay()
 {
 	Super::BeginPlay();
+
+	// 장비 변경 이벤트 바인딩(PartyIndex는 이후에 세팅될 수 있으므로, 이벤트는 미리 걸어둔다)
+	if (UGameInstance* GI = GetGameInstance())
+	{
+		if (UEquipmentSubsystem* EquipSub = GI->GetSubsystem<UEquipmentSubsystem>())
+		{
+			EquipSub->OnEquipmentChanged.RemoveDynamic(this, &ABattleBaseUnit::HandleEquipmentChanged);
+			EquipSub->OnEquipmentChanged.AddDynamic(this, &ABattleBaseUnit::HandleEquipmentChanged);
+		}
+	}
+
+	RefreshEquipmentVisuals();
 	
+}
+
+void ABattleBaseUnit::EndPlay(const EEndPlayReason::Type EndPlayReason)
+{
+	if (UGameInstance* GI = GetGameInstance())
+	{
+		if (UEquipmentSubsystem* EquipSub = GI->GetSubsystem<UEquipmentSubsystem>())
+		{
+			EquipSub->OnEquipmentChanged.RemoveDynamic(this, &ABattleBaseUnit::HandleEquipmentChanged);
+		}
+	}
+
+	Super::EndPlay(EndPlayReason);
+}
+
+void ABattleBaseUnit::RefreshWeaponVisual()
+{
+	if (!WeaponMeshComp)
+	{
+		return;
+	}
+	
+	// 스켈레탈 유닛이 아니면 무기 표시 X
+	USkeletalMeshComponent* SkelComp = GetMesh();
+	if (!SkelComp || !UnitData)
+	{
+		WeaponMeshComp->SetStaticMesh(nullptr);
+		WeaponMeshComp->SetVisibility(false, true);
+		return;
+	}
+	
+	const FName AttachSocket = UnitData->WeaponAttachSocketName;
+	if (AttachSocket == NAME_None)
+	{
+		// 유닛 데이터에서 소켓을 지정하지 않은 경우 무기 비주얼 숨김
+		WeaponMeshComp->SetVisibility(false, true);
+		return;
+	}
+	
+	if (!SkelComp->DoesSocketExist(AttachSocket))
+	{
+		UE_LOG(LogTemp, Warning, TEXT("[WeaponVisual] %s: Attach socket '%s' not found on SkeletalMesh '%s'"),
+	*GetName(), *AttachSocket.ToString(), *GetNameSafe(SkelComp->GetSkeletalMeshAsset()));
+		WeaponMeshComp->SetVisibility(false, true);
+		return;
+	}
+	
+	// 1. 우선 장착 시스템에 무기가 있으면 사용
+	UWeaponDataAsset* WeaponDA = nullptr;
+	if (UGameInstance* GI = GetGameInstance())
+	{
+		if (UEquipmentSubsystem* Equip = GI->GetSubsystem<UEquipmentSubsystem>())
+		{
+			if (PartyIndex != INDEX_NONE)
+			{
+				WeaponDA = Equip->GetEquippedWeapon(PartyIndex);
+			}
+		}
+	}
+	
+	// 2. fallback: 유닛 기본 무기
+	if (!WeaponDA)
+	{
+		WeaponDA = UnitData->DefaultWeapon;
+	}
+	
+	if (!WeaponDA || !WeaponDA->WeaponMesh)
+	{
+		WeaponMeshComp->SetStaticMesh(nullptr);
+		WeaponMeshComp->SetVisibility(false, true);
+		return;
+	}
+	
+	WeaponMeshComp->SetVisibility(true, true);
+	WeaponMeshComp->SetStaticMesh(WeaponDA->WeaponMesh);
+	WeaponMeshComp->AttachToComponent(
+		SkelComp,
+		FAttachmentTransformRules::SnapToTargetIncludingScale,
+		AttachSocket
+	);
+	
+}
+
+void ABattleBaseUnit::HandleEquipmentChanged(int32 ChangedPartyIndex)
+{
+	if (PartyIndex == INDEX_NONE) return;
+	if (ChangedPartyIndex != PartyIndex) return;
+	RefreshEquipmentVisuals();
+}
+
+void ABattleBaseUnit::RefreshEquipmentVisuals()
+{
+	if (!WeaponMeshComp)
+	{
+		return;
+	}
+
+	// PartyIndex가 없는 유닛(적 등)은 장비 비주얼을 사용하지 않는다.
+	if (PartyIndex == INDEX_NONE)
+	{
+		WeaponMeshComp->SetStaticMesh(nullptr);
+		WeaponMeshComp->SetHiddenInGame(true);
+		for (auto& KVP : PartMeshBySocket)
+		{
+			if (KVP.Value)
+			{
+				KVP.Value->DestroyComponent();
+			}
+		}
+		PartMeshBySocket.Empty();
+		return;
+	}
+
+	UGameInstance* GI = GetGameInstance();
+	UEquipmentSubsystem* EquipSub = GI ? GI->GetSubsystem<UEquipmentSubsystem>() : nullptr;
+	if (!EquipSub)
+	{
+		return;
+	}
+
+	// 무기 본체 적용
+	UWeaponDataAsset* WeaponDA = EquipSub->GetEquippedWeapon(PartyIndex);
+	if (WeaponDA && WeaponDA->WeaponMesh)
+	{
+		WeaponMeshComp->SetStaticMesh(WeaponDA->WeaponMesh);
+		WeaponMeshComp->SetHiddenInGame(false);
+	}
+	else
+	{
+		WeaponMeshComp->SetStaticMesh(nullptr);
+		WeaponMeshComp->SetHiddenInGame(true);
+	}
+
+	// 무기 본체를 캐릭터 메시 소켓에 붙이고 싶으면 여기서 처리
+	if (USkeletalMeshComponent* Skel = GetMesh())
+	{
+		if (WeaponHoldSocketName != NAME_None && Skel->DoesSocketExist(WeaponHoldSocketName))
+		{
+			WeaponMeshComp->AttachToComponent(Skel, FAttachmentTransformRules::KeepRelativeTransform, WeaponHoldSocketName);
+		}
+		else
+		{
+			WeaponMeshComp->AttachToComponent(Skel, FAttachmentTransformRules::KeepRelativeTransform);
+		}
+	}
+
+	// 슬롯/파츠 동기화
+	TSet<FName> DesiredSockets;
+	if (WeaponDA)
+	{
+		for (const FWeaponModSlotDef& Def : WeaponDA->ModSlots)
+		{
+			if (Def.SocketName != NAME_None)
+			{
+				DesiredSockets.Add(Def.SocketName);
+			}
+		}
+	}
+
+	// 무기 슬롯에 없는 파츠 컴포넌트 정리
+	for (auto It = PartMeshBySocket.CreateIterator(); It; ++It)
+	{
+		if (!DesiredSockets.Contains(It.Key()))
+		{
+			if (It.Value())
+			{
+				It.Value()->DestroyComponent();
+			}
+			It.RemoveCurrent();
+		}
+	}
+
+	for (const FName SocketName : DesiredSockets)
+	{
+		UWeaponPartDataAsset* PartDA = EquipSub->GetEquippedPart(PartyIndex, SocketName);
+		UStaticMeshComponent* PartComp = PartMeshBySocket.FindRef(SocketName);
+
+		// 파츠가 없거나 메시가 없으면 제거
+		if (!PartDA || !PartDA->AttachmentMesh || WeaponMeshComp->GetStaticMesh() == nullptr)
+		{
+			if (PartComp)
+			{
+				PartComp->DestroyComponent();
+				PartMeshBySocket.Remove(SocketName);
+			}
+			continue;
+		}
+
+		// 소켓 검증
+		if (!WeaponMeshComp->DoesSocketExist(SocketName))
+		{
+			UE_LOG(LogTemp, Warning, TEXT("[EquipmentVisual] Weapon mesh socket not found: %s (Weapon=%s Unit=%s)"),
+				*SocketName.ToString(), *GetNameSafe(WeaponDA), *GetName());
+			continue;
+		}
+
+		if (!PartComp)
+		{
+			PartComp = NewObject<UStaticMeshComponent>(this);
+			if (!PartComp) continue;
+			PartComp->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+			PartComp->SetGenerateOverlapEvents(false);
+			PartComp->RegisterComponent();
+			PartComp->AttachToComponent(WeaponMeshComp, FAttachmentTransformRules::SnapToTargetNotIncludingScale, SocketName);
+			PartMeshBySocket.Add(SocketName, PartComp);
+		}
+
+		PartComp->SetStaticMesh(PartDA->AttachmentMesh);
+		PartComp->SetHiddenInGame(false);
+	}
 }
 
 // BattleContolSubsystem에서 유닛을 spanw시킨 직후 호출
@@ -161,16 +397,23 @@ void ABattleBaseUnit::BasicAttack(ABattleBaseUnit* Target)
 	
 	const float Damage = FMath::Max(1.f, CurrentAttackPower);
 	
+	UGameplayStatics::ApplyDamage(Target, Damage, GetController(), this, UDamageType::StaticClass());
+	
+	// ApplyDamage 이후 Target->CurrentHP는 TakeDamage에서 갱신됨(동기 호출)
+	const FString Msg = FString::Printf(
+		TEXT("[DMG][Basic] %s -> %s : -%.1f  HP %.0f/%.0f"),
+		*GetUnitLabel(this),
+		*GetUnitLabel(Target),
+		Damage,
+		Target->CurrentHP,
+		Target->GetMaxHP()
+	);
+	ScreenCombatText(ESkillEffectType::Damage, Msg);
+
 	UE_LOG(LogTemp, Warning, TEXT("[BasicAttack] %s -> %s : %0.1f"),
 		*GetName(), *Target->GetName(), Damage);
 	
-	if (GEngine)
-	{
-		GEngine->AddOnScreenDebugMessage(-1, 1.5f, FColor::Yellow,
-			FString::Printf(TEXT("[BasicAttack] %s -> %s : %0.1f"), *GetName(), *Target->GetName(), Damage));
-	}
 	
-	UGameplayStatics::ApplyDamage(Target, Damage, GetController(), this, UDamageType::StaticClass());
 }
 
 void ABattleBaseUnit::ExecuteAction(USkillDataAsset* SkillData, AActor* Target)
@@ -234,9 +477,13 @@ void ABattleBaseUnit::ExecuteActionOnTargets(USkillDataAsset* SkillData, const T
 	
 	CurrentSkillData = SkillData;
 	
+	bActionMontageEnded = false;
+	PendingProjectiles = 0;
+	CurrentMontageInstanceID = INDEX_NONE;
+	
 	// 런타임 스킬 스탯 확정 - 타수/효과
 	CurrentActionSpec = BuildRuntimeSpec(SkillData); // 액션의 진짜 타수/투사체수/배율 확정
-	ActionTotalHits = CurrentActionSpec.Hitcount;
+	ActionTotalHits = CurrentActionSpec.HitCount;
 	ActionHitsApplied = 0;
 	
 	CurrentActionTargets.Empty();
@@ -260,7 +507,8 @@ void ABattleBaseUnit::ExecuteActionOnTargets(USkillDataAsset* SkillData, const T
 	
 	// 애니메이션 없으면 즉시 처리 - 프로토타입
 	UAnimInstance* AnimInstance = GetMesh() ? GetMesh()->GetAnimInstance() : nullptr;
-	if (!AnimInstance || !SkillData->ActionMontage)
+	UAnimMontage* MontageToPlay = ResolveActionMontage(SkillData);
+	if (!AnimInstance || !MontageToPlay)
 	{
 		ApplyRemainingHits();
 		FinishAction();
@@ -271,8 +519,8 @@ void ABattleBaseUnit::ExecuteActionOnTargets(USkillDataAsset* SkillData, const T
 	AnimInstance->OnPlayMontageNotifyBegin.RemoveDynamic(this, &ABattleBaseUnit::HandleHitNotify);
 	AnimInstance->OnPlayMontageNotifyBegin.AddDynamic(this, &ABattleBaseUnit::HandleHitNotify);
 	
-	// 몽타주 재생
-	const float PlayResult = AnimInstance->Montage_Play(SkillData->ActionMontage);
+	// 몽타주 재생 (유닛별 오버라이드 가능)
+	const float PlayResult = AnimInstance->Montage_Play(MontageToPlay);
 	if (PlayResult <= 0.f)
 	{
 		ApplyRemainingHits();
@@ -281,7 +529,7 @@ void ABattleBaseUnit::ExecuteActionOnTargets(USkillDataAsset* SkillData, const T
 	}
 	
 	// 가장 최근에 재생된 몽타주의 인스턴스 ID를 확보해서 NotifyPayload에서 들어오는 ID와 매칭
-	if (FAnimMontageInstance* AMInst = AnimInstance->GetActiveInstanceForMontage(SkillData->ActionMontage))
+	if (FAnimMontageInstance* AMInst = AnimInstance->GetActiveInstanceForMontage(MontageToPlay))
 	{
 		CurrentMontageInstanceID = AMInst->GetInstanceID(); // NotifyPayload.MontageInstanceId와 비교할 값
 	}
@@ -289,7 +537,7 @@ void ABattleBaseUnit::ExecuteActionOnTargets(USkillDataAsset* SkillData, const T
 	// 종료 델리게이트
 	FOnMontageEnded EndDelegate;
 	EndDelegate.BindUObject(this, &ABattleBaseUnit::OnActionMontageEnded);
-	AnimInstance->Montage_SetEndDelegate(EndDelegate, SkillData->ActionMontage);
+	AnimInstance->Montage_SetEndDelegate(EndDelegate, MontageToPlay);
 }
 
 void ABattleBaseUnit::HandleHitNotify(FName NotifyName, const FBranchingPointNotifyPayload& Payload)
@@ -406,6 +654,8 @@ float ABattleBaseUnit::TakeDamage(float DamageAmount, struct FDamageEvent const&
 	const float MaxHP = GetMaxHP();
 	CurrentHP = FMath::Clamp(CurrentHP - ActualDamage,  0.f,  MaxHP);
 	
+	SpawnDamageText(ActualDamage);
+	
 	UE_LOG(LogTemp, Warning, TEXT("%s took %f damage. Remaining HP: %f/%f"), *GetName(), ActualDamage, CurrentHP, MaxHP);
 	
 	// UI 갱신
@@ -452,16 +702,43 @@ void ABattleBaseUnit::Die()
 
 void ABattleBaseUnit::NotifyProjectileResolved(ABattleBaseUnit* HitTarget, float Damage, bool bDidHit)
 {
-	// 대미지/상태이상 적용은 충돌 성공했을 대만
+	const FString HitMark = bDidHit ? TEXT("HIT") : TEXT("MISS");
+
+	// 화면 출력 (ApplyDamage 수행 여부와 무관하게 결과를 보여줌)
+	{
+		const float CurHP = IsValid(HitTarget) ? HitTarget->CurrentHP : -1.f;
+		const float MaxHP = IsValid(HitTarget) ? HitTarget->GetMaxHP() : -1.f;
+
+		const FString Msg = FString::Printf(
+			TEXT("[DMG][Projectile][%s][%s] %s -> %s : -%.1f  HP %.0f/%.0f"),
+			*GetSkillLabel(CurrentSkillData),
+			*HitMark,
+			*GetUnitLabel(this),
+			*GetUnitLabel(HitTarget),
+			Damage,
+			CurHP,
+			MaxHP
+		);
+		ScreenCombatText(ESkillEffectType::Damage, Msg);
+	}
+
 	if (bDidHit && IsValid(HitTarget) && !HitTarget->IsDead())
 	{
-		// 대미지 적용
 		UGameplayStatics::ApplyDamage(HitTarget, Damage, GetController(), this, UDamageType::StaticClass());
-		
-		// 스턴과 같은 부가효과도 충돌 시점에 같이 적용하는 로직
+
 		if (CurrentActionSpec.EffectType == ESkillEffectType::Stun)
 		{
-			HitTarget->ApplyStun(FMath::Max(1, CurrentActionSpec.StunDurationActions));
+			const int32 Dur = FMath::Max(1, CurrentActionSpec.StunDurationActions);
+			HitTarget->ApplyStun(Dur);
+
+			const FString Msg = FString::Printf(
+				TEXT("[STUN][Projectile][%s] %s -> %s : dur=%d"),
+				*GetSkillLabel(CurrentSkillData),
+				*GetUnitLabel(this),
+				*GetUnitLabel(HitTarget),
+				Dur
+			);
+			ScreenCombatText(ESkillEffectType::Stun, Msg);
 		}
 	}
 	
@@ -493,6 +770,70 @@ int32 ABattleBaseUnit::GetSkillNumber()
 	return res;
 }
 
+UAnimMontage* ABattleBaseUnit::ResolveActionMontage(const USkillDataAsset* Skill) const
+{
+	if (!Skill) return nullptr;
+	
+	// 유닛별 오버라이드가 있으면 우선
+	if (UnitData)
+	{
+		if (UAnimMontage* const* Found = UnitData->SkillMontageOverrides.Find(const_cast<USkillDataAsset*>(Skill)))
+		{
+			return *Found;
+		}
+	}
+	
+	// 없으면 스킬 기본 몽타주
+	return Skill->ActionMontage;
+}
+
+FName ABattleBaseUnit::ResolveMuzzleSocketName(const USkillDataAsset* Skill) const
+{
+	if (!Skill) return NAME_None;
+
+	if (UnitData)
+	{
+		if (const FName* Found = UnitData->SkillMuzzleSocketOverrides.Find(const_cast<USkillDataAsset*>(Skill)))
+		{
+			if (*Found != NAME_None)
+			{
+				return *Found;
+			}
+		}
+	}
+
+	return Skill->MuzzleSocketName;
+}
+
+float ABattleBaseUnit::GetEnemyNoMontageDelaySeconds() const
+{
+	// 적 유닛은 PartyIndex == INDEX_NONE
+	if (PartyIndex != INDEX_NONE) return 0.f;
+	
+	// UnitData에 값이 있으면 사용, 없으면 기본값(1.5)
+	if (UnitData && UnitData->EnemyNoMontageAttackDelaySeconds > 0.f)
+	{
+		return UnitData->EnemyNoMontageAttackDelaySeconds;
+	}
+	return 1.5f;
+}
+
+void ABattleBaseUnit::HandleNoMontageActionDelayExpired()
+{
+	// 지연 중 사망 등으로 실행 불가하면 안전 종료
+	if (IsDead())
+	{
+		bActionMontageEnded = true;
+		TryFinishAction();
+		return;
+	}
+
+	ApplyRemainingHits();
+	bActionMontageEnded = true;
+	TryFinishAction();
+}
+
+
 FSkillRuntimeModifier ABattleBaseUnit::GetSkillRuntimeModifier(const USkillDataAsset* Skill) const
 {
 	FSkillRuntimeModifier Modifier;
@@ -512,7 +853,7 @@ FSkillRuntimeSpec ABattleBaseUnit::BuildRuntimeSpec(const USkillDataAsset* Skill
 	Spec.EffectType = Skill->EffectType;
 	
 	Spec.DamageMultiplier = Skill->DamageMultiplier;
-	Spec.Hitcount = Skill->BaseHitCount;
+	Spec.HitCount = Skill->BaseHitCount;
 	
 	Spec.HealAmount = Skill->HealAmount;
 	Spec.BuffAtk = Skill->BuffAtk;
@@ -528,11 +869,11 @@ FSkillRuntimeSpec ABattleBaseUnit::BuildRuntimeSpec(const USkillDataAsset* Skill
 	// 효과가 Damage가 아니면 타수는 1로 고정 - 나중에 Heal 다중 확장
 	if (Spec.EffectType != ESkillEffectType::Damage)
 	{
-		Spec.Hitcount = 1;
+		Spec.HitCount = 1;
 	}
 	
 	const FSkillRuntimeModifier Modifier = GetSkillRuntimeModifier(Skill);
-	Spec.Hitcount = FMath::Max(1, Spec.Hitcount + Modifier.BonusHitCount);
+	Spec.HitCount = FMath::Max(1, Spec.HitCount + Modifier.BonusHitCount);
 	Spec.ProjectileCount = FMath::Max(1, Spec.ProjectileCount + Modifier.BonusProjectileCount);
 	
 	Spec.DamageMultiplier = (Spec.DamageMultiplier + Modifier.DamageMulAdd) * Modifier.DamageMulMul;
@@ -566,6 +907,8 @@ void ABattleBaseUnit::ApplyHealToUnit(ABattleBaseUnit* Target, float HealAmount)
 	const float MaxHP = Target->GetMaxHP();
 	Target->CurrentHP = FMath::Clamp(Target->CurrentHP + HealAmount, 0.f, MaxHP);
 
+	Target->OnHPChanged.Broadcast(Target->CurrentHP, MaxHP); // 힐 이후 UI 갱신
+	
 	UE_LOG(LogTemp, Warning, TEXT("[Heal] %s +%.1f => %.1f/%.1f"),
 		*Target->GetName(), HealAmount, Target->CurrentHP, MaxHP);
 }
@@ -578,10 +921,7 @@ void ABattleBaseUnit::ApplyOneHit()
 	const FSkillRuntimeSpec& Spec = CurrentActionSpec; // 캐싱된 스펙 사용하여 일관성 보장
 	
 	// 이미 타수 다 쳤으면 무시
-	if (Spec.EffectType == ESkillEffectType::Damage)
-	{
-		if (ActionHitsApplied >= ActionTotalHits) return;
-	}
+	if (ActionHitsApplied >= ActionTotalHits) return;
 	
 	// 유효 타겟만 정리
 	TArray<ABattleBaseUnit*> Targets;
@@ -595,7 +935,13 @@ void ABattleBaseUnit::ApplyOneHit()
 			}
 		}
 	}
-	if (Targets.Num() == 0) return;
+	if (Targets.Num() == 0)
+	{
+		// 남은 히트가 있어도 적용할 대상이 사라진 경우(첫 타격에 사망 등)
+		// ApplyRemainingHits() 무한 루프 방지를 위해 강제로 완료 처리
+		ActionHitsApplied = ActionTotalHits;
+		return;
+	}
 
 	switch (Spec.EffectType)
 	{
@@ -607,8 +953,19 @@ void ABattleBaseUnit::ApplyOneHit()
 			for (ABattleBaseUnit* T : Targets)
 			{
 				UGameplayStatics::ApplyDamage(T, Damage, GetController(), this, UDamageType::StaticClass());
-				UE_LOG(LogTemp, Warning, TEXT("[SkillDamage] %s -> %s : %.1f (hit %d/%d)"),
-			*GetName(), *T->GetName(), Damage, ActionHitsApplied + 1, ActionTotalHits);
+				
+				const FString Msg = FString::Printf(
+			TEXT("[DMG][Instant][%s] %s -> %s : -%.1f  HP %.0f/%.0f  (%d/%d)"),
+					*GetSkillLabel(CurrentSkillData),
+					*GetUnitLabel(this),
+					*GetUnitLabel(T),
+					Damage,
+					T->CurrentHP,
+					T->GetMaxHP(),
+					ActionHitsApplied + 1,
+					ActionTotalHits
+				);
+				ScreenCombatText(ESkillEffectType::Damage, Msg);
 			}
 					
 			ActionHitsApplied++;
@@ -620,7 +977,19 @@ void ABattleBaseUnit::ApplyOneHit()
 			for (ABattleBaseUnit* T : Targets)
 			{
 				ApplyHealToUnit(T, Spec.HealAmount);
+				
+				const FString Msg = FString::Printf(
+			TEXT("[HEAL][%s] %s -> %s : +%.1f  HP %.0f/%.0f"),
+					*GetSkillLabel(CurrentSkillData),
+					*GetUnitLabel(this),
+					*GetUnitLabel(T),
+					Spec.HealAmount,
+					T->CurrentHP,
+					T->GetMaxHP()
+				);
+				ScreenCombatText(ESkillEffectType::Heal, Msg);
 			}
+			
 			// Heal은 1회로 끝
 			ActionHitsApplied = ActionTotalHits;
 			break;
@@ -634,21 +1003,43 @@ void ABattleBaseUnit::ApplyOneHit()
 				Buff.AddMultiplier = Spec.BuffAtk.AddMultiplier;
 				Buff.AddFlat = Spec.BuffAtk.AddFlat;
 				Buff.RemainingActions = FMath::Max(1, Spec.BuffAtk.DurationActions);
-				
+
 				T->ActiveAtkBuffs.Add(Buff);
-				
-				UE_LOG(LogTemp, Warning, TEXT("[BuffATK] %s buffed: +mul=%.2f +flat=%.1f dur=%d"),
-				*T->GetName(), Buff.AddMultiplier, Buff.AddFlat, Buff.RemainingActions);
+
+				const FString Msg = FString::Printf(
+					TEXT("[BUFF ATK][%s] %s -> %s : +flat=%.1f +mul=%.2f dur=%d"),
+					*GetSkillLabel(CurrentSkillData),
+					*GetUnitLabel(this),
+					*GetUnitLabel(T),
+					Buff.AddFlat,
+					Buff.AddMultiplier,
+					Buff.RemainingActions
+				);
+				ScreenCombatText(ESkillEffectType::BuffATK, Msg);
+
+				// (참고) 현재 코드에 break가 있어서 첫 타겟만 버프 적용됨.
+				// AllAllies 같은 확장 생각하면 break 제거가 맞음.
 				ActionHitsApplied = ActionTotalHits;
 				break;
 			}
+			break;
 		}
 		
 	case ESkillEffectType::Stun:
 		{
 			for (ABattleBaseUnit* Unit : Targets)
 			{
+				const int32 Dur = FMath::Max(1, Spec.StunDurationActions);
 				Unit->ApplyStun(FMath::Max(1, Spec.StunDurationActions));
+				
+				const FString Msg = FString::Printf(
+			TEXT("[STUN][%s] %s -> %s : dur=%d"),
+					*GetSkillLabel(CurrentSkillData),
+					*GetUnitLabel(this),
+					*GetUnitLabel(Unit),
+					Dur
+				);
+				ScreenCombatText(ESkillEffectType::Stun, Msg);
 			}
 			ActionHitsApplied = ActionTotalHits;
 			break;
@@ -658,9 +1049,30 @@ void ABattleBaseUnit::ApplyOneHit()
 
 void ABattleBaseUnit::ApplyRemainingHits()
 {
+	// 안전장치: 타겟 소멸/무효화 등으로 ApplyOneHit이 진척 없이 return하면 무한 루프가 발생할 수 있음
+	int32 Guard = 0;
 	while (ActionHitsApplied < ActionTotalHits)
 	{
+		const int32 Before = ActionHitsApplied;
 		ApplyOneHit();
+		
+		// 진척이 없으면 강제 완료 처리
+		if (ActionHitsApplied == Before)
+		{
+			UE_LOG(LogTemp, Warning, TEXT("[Action] ApplyRemainingHits made no progress. Forcing completion. unit=%s skill=%s"),
+				*GetName(), *GetSkillLabel(CurrentSkillData));
+			ActionHitsApplied = ActionTotalHits;
+			break;
+		}
+		
+		// 추가 안전장치 (예상치 못한 상태에서 무한 루프 방지)
+		if (++Guard > 64)
+		{
+			UE_LOG(LogTemp, Error, TEXT("[Action] ApplyRemainingHits guard overflow. unit=%s skill=%s"),
+				*GetName(), *GetSkillLabel(CurrentSkillData));
+			ActionHitsApplied = ActionTotalHits;
+			break;
+		}
 	}
 }
 
@@ -732,4 +1144,147 @@ void ABattleBaseUnit::SpawnProjectileVolley(const TArray<ABattleBaseUnit*>& Targ
 			P->InitProjectile(this, Target, DamagePerProjectile); // 투사체에 발사/타겟/대미지 전달
 		}
 	}
+}
+
+FColor ABattleBaseUnit::GetEffectColor(ESkillEffectType EffectType)
+{
+	switch (EffectType)
+	{
+	case ESkillEffectType::Damage:  return FColor::Red;
+	case ESkillEffectType::Heal:    return FColor::Green;
+	case ESkillEffectType::BuffATK: return FColor::Cyan;
+	case ESkillEffectType::Stun:    return FColor(255, 165, 0); // Orange
+	default:                        return FColor::White;
+	}
+}
+
+FString ABattleBaseUnit::GetUnitLabel(const ABattleBaseUnit* Unit)
+{
+	if (!IsValid(Unit)) return TEXT("None");
+	if (Unit->UnitData && !Unit->UnitData->UnitName.IsEmpty())
+	{
+		return Unit->UnitData->UnitName; // 사람이 읽기 쉬운 이름 우선
+	}
+	return Unit->GetName();
+}
+
+FString ABattleBaseUnit::GetSkillLabel(const USkillDataAsset* Skill)
+{
+	if (IsValid(Skill) && !Skill->SkillName.IsEmpty())
+	{
+		return Skill->SkillName;
+	}
+	return TEXT("BasicAttack");
+}
+
+void ABattleBaseUnit::SpawnDamageText(float DamageAmount)
+{
+	if (DamageAmount <= 0.f)
+	{
+		UE_LOG(LogTemp, Error, TEXT("들어온 대미지 0이하"));
+		return;
+	} 
+	if (!DamageTextActorClass)
+	{
+		UE_LOG(LogTemp, Error, TEXT("대미지 텍스트 액터 클래스 존재 X"));
+		return;
+	} 
+
+	UWorld* World = GetWorld();
+	if (!World) return;
+
+	FVector SpawnLoc = GetActorLocation() + FVector(0.f, 0.f, 150.f);
+	if (UIAnchorPoint)
+	{
+		SpawnLoc = UIAnchorPoint->GetComponentLocation();
+	}
+
+	FActorSpawnParameters Params;
+	Params.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+
+	ABattleDamageTextActor* TextActor = World->SpawnActor<ABattleDamageTextActor>(DamageTextActorClass, SpawnLoc, FRotator(0, 45.0f, 0), Params);
+	if (TextActor)
+	{
+		TextActor->InitText(DamageAmount, false);
+	}
+	
+	UE_LOG(LogTemp, Error, TEXT("데미지 텍스트 정상 출력!"));
+}
+
+void ABattleBaseUnit::TriggerHitReaction()
+{
+	// 적(PartyIndex == INDEX_NONE): 파티클
+	// 아군(PartyIndex != INDEX_NONE): 피격 몽타주
+	if (!UnitData) return;
+
+	if (PartyIndex != INDEX_NONE)
+	{
+		// 아군 피격 몽타주
+		if (UnitData->HitReactMontage && GetMesh())
+		{
+			if (UAnimInstance* Anim = GetMesh()->GetAnimInstance())
+			{
+				// 너무 잦은 타격에서 계속 재시작되는 것을 방지
+				if (!Anim->Montage_IsPlaying(UnitData->HitReactMontage))
+				{
+					Anim->Montage_Play(UnitData->HitReactMontage, 1.f);
+				}
+			}
+		}
+		return;
+	}
+
+	// 적 피격 파티클
+	if (!UnitData->EnemyHitParticle) return;
+
+	USceneComponent* AttachComp = nullptr;
+	if (GetMesh() && GetMesh()->GetSkeletalMeshAsset())
+	{
+		AttachComp = GetMesh();
+	}
+	else if (StaticMeshComp)
+	{
+		AttachComp = StaticMeshComp;
+	}
+
+	if (!AttachComp)
+	{
+		UGameplayStatics::SpawnEmitterAtLocation(GetWorld(), UnitData->EnemyHitParticle, GetActorLocation() + UnitData->EnemyHitParticleOffset);
+		return;
+	}
+
+	// 소켓 있으면 소켓, 없으면 위치+오프셋
+	if (USkeletalMeshComponent* Skel = Cast<USkeletalMeshComponent>(AttachComp))
+	{
+		if (UnitData->EnemyHitParticleSocket != NAME_None && Skel->DoesSocketExist(UnitData->EnemyHitParticleSocket))
+		{
+			UGameplayStatics::SpawnEmitterAttached(
+				UnitData->EnemyHitParticle,
+				Skel,
+				UnitData->EnemyHitParticleSocket,
+				UnitData->EnemyHitParticleOffset,
+				FRotator::ZeroRotator,
+				EAttachLocation::KeepRelativeOffset,
+				true
+			);
+			return;
+		}
+	}
+
+	UGameplayStatics::SpawnEmitterAtLocation(GetWorld(), UnitData->EnemyHitParticle, AttachComp->GetComponentLocation() + UnitData->EnemyHitParticleOffset);
+}
+
+void ABattleBaseUnit::ScreenCombatText(ESkillEffectType EffectType, const FString& Text, float Duration) const
+{
+#if !UE_BUILD_SHIPPING
+	if (GEngine)
+	{
+		GEngine->AddOnScreenDebugMessage(
+			-1,
+			Duration,
+			GetEffectColor(EffectType),
+			Text
+		);
+	}
+#endif
 }
