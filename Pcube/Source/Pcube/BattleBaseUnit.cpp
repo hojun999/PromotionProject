@@ -950,11 +950,17 @@ void ABattleBaseUnit::ApplyOneHit()
 			const float BaseATK = GetEffectiveAttackPower();
 			const float Damage = FMath::Max(1.f, BaseATK * Spec.DamageMultiplier);
 				
-			for (ABattleBaseUnit* T : Targets)
+			if (Spec.DeliveryType == ESkillDeliveryType::Projectile)
 			{
-				UGameplayStatics::ApplyDamage(T, Damage, GetController(), this, UDamageType::StaticClass());
-				
-				const FString Msg = FString::Printf(
+				SpawnProjectileVolley(Targets, Damage); // 발사
+			}
+			else
+			{
+				for (ABattleBaseUnit* T : Targets)
+				{
+					UGameplayStatics::ApplyDamage(T, Damage, GetController(), this, UDamageType::StaticClass());
+					
+					const FString Msg = FString::Printf(
 			TEXT("[DMG][Instant][%s] %s -> %s : -%.1f  HP %.0f/%.0f  (%d/%d)"),
 					*GetSkillLabel(CurrentSkillData),
 					*GetUnitLabel(this),
@@ -965,7 +971,8 @@ void ABattleBaseUnit::ApplyOneHit()
 					ActionHitsApplied + 1,
 					ActionTotalHits
 				);
-				ScreenCombatText(ESkillEffectType::Damage, Msg);
+					ScreenCombatText(ESkillEffectType::Damage, Msg);
+				}
 			}
 					
 			ActionHitsApplied++;
