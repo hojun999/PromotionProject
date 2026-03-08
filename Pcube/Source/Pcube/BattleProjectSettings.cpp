@@ -2,8 +2,3 @@
 
 
 #include "BattleProjectSettings.h"
-
-// UBattleProjectSettings::UBattleProjectSettings()
-// {
-// 	
-// }

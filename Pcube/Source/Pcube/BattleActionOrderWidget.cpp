@@ -9,24 +9,29 @@
 
 void UBattleActionOrderWidget::RefreshList(const TArray<AActor*>& NewOrder)
 {
-	if (!ActionOrderBox) {
-		UE_LOG(LogTemp, Error, TEXT("Widget: TurnOrderBox(VerticalBox) is NULL!"));
+	if (!ActionOrderBox || !SlotClass) {
+		UE_LOG(LogTemp, Error, TEXT("BattleActionOrderWidget: TurnOrderBox(VerticalBox) is NULL!"));
 		return;
 	}
 	
-	if (!ActionOrderBox || !SlotClass) return;
-	
 	ActionOrderBox->ClearChildren();
-	UE_LOG(LogTemp, Warning, TEXT("Widget: VerticalBox Cleared."));
 	
 	for (AActor* Actor : NewOrder)
 	{
-		if (auto* Unit = Cast<ABattleBaseUnit>(Actor))
+		// if (auto* Unit = Cast<ABattleBaseUnit>(Actor))
+		// {
+		// 	auto* NewSlot = CreateWidget<UBattleActionOrderSlot>(this, SlotClass);
+		// 	NewSlot->SetUnitSlotInfo(Unit); // 슬롯에 데이터 세팅
+		// 	ActionOrderBox->AddChildToVerticalBox(NewSlot);
+		// }
+		if (ABattleBaseUnit* Unit = Cast<ABattleBaseUnit>(Actor))
 		{
-			auto* NewSlot = CreateWidget<UBattleActionOrderSlot>(this, SlotClass);
-			NewSlot->SetUnitSlotInfo(Unit); // 슬롯에 데이터 세팅
+			UBattleActionOrderSlot* NewSlot = CreateWidget<UBattleActionOrderSlot>(this, SlotClass);
+			if (!NewSlot) continue;
+			NewSlot->SetUnitSlotInfo(Unit);
 			ActionOrderBox->AddChildToVerticalBox(NewSlot);
 		}
+		
 	}
 	UE_LOG(LogTemp, Log, TEXT("Widget: VerticalBox Refreshed with %d slots."), NewOrder.Num());
 }

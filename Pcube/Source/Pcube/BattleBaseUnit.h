@@ -113,7 +113,7 @@ public:
 	int32 PartyIndex = INDEX_NONE;
 	
 	// 스킬 목록 (아군/적 개수 제한 없이 데이터로 관리)
-	UPROPERTY(EditAnywhere, Category = "Skills")
+	UPROPERTY(EditAnywhere, Category = "Skills", meta=(DeprecatedProperty, DeprecationMessage="Use UnitData->SkillList instead."))
 	TArray<USkillDataAsset*> Skills;
 	
 	// --- 스탯 ---
@@ -202,7 +202,6 @@ public:
 	void ExecuteAction(USkillDataAsset* SkillData, AActor* TargetUnit);
 	void ExecuteAction(USkillDataAsset* SkillData, const TArray<AActor*>& Targets);
 	void ExecuteActionOnTargets(USkillDataAsset* SkillData, const TArray<ABattleBaseUnit*>& Targets);
-	void ApplyCurrentSkillDamage();
 	void ApplyStun(int32 DurationActions);
 	
 	UFUNCTION(BlueprintCallable)
@@ -275,17 +274,11 @@ protected:
 	
 private:
 	UPROPERTY()
-	ABattleBaseUnit* CurrentActionTarget;	// 액션 시작 시 확정된 스킬 스펙(노티파이마다 재계산 금지)
-	
-	UPROPERTY()
 	TArray<TWeakObjectPtr<ABattleBaseUnit>> CurrentActionTargets;
 	
 	UPROPERTY()
 	class USkillDataAsset* CurrentSkillData; // 현재 사용 중인 스킬 데이터
 
-	UPROPERTY()
-	bool bDamageAppliedThisAction = false;
-	
 	UPROPERTY()
 	int32 ActionTotalHits = 1;
 	
@@ -296,12 +289,8 @@ private:
 	UPROPERTY()
 	bool bActionMontageEnded = false; // 몽타주 종료 여부 (투사체 대기 시 FinishAction 지연용)
 	
-	FTimerHandle NoMontageActionTimerHandle;
-
 	UAnimMontage* ResolveActionMontage(const USkillDataAsset* Skill) const;
 	FName ResolveMuzzleSocketName(const USkillDataAsset* Skill) const;
-	float GetEnemyNoMontageDelaySeconds() const;
-	void HandleNoMontageActionDelayExpired();
 	
 	void TryFinishAction(); // 몽타주 종료 + 투사체 전부 종료면 FinishAction 호출
 	
@@ -310,6 +299,7 @@ private:
 	int32 PendingProjectiles = 0; // 아직 충돌/소멸되지 않은 투사체 수
 	
 	void SpawnProjectileVolley(const TArray<ABattleBaseUnit*>& Targets, float WaveDamage);
+	void SpawnSingleProjectile(TWeakObjectPtr<ABattleBaseUnit> Target, float DamagePerProjectile, int32 ProjectileIndex, int32 ProjectileCount);
 	
 	// --- 버프 ---
 	UPROPERTY()

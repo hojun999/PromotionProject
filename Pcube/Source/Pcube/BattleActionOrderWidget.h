@@ -24,7 +24,7 @@ public:
 protected:
 	// 블루프린트의 VerticalBox와 이름이 같아야 함
 	UPROPERTY(BlueprintReadOnly, meta=(BindWidget))
-	class UVerticalBox* ActionOrderBox;
+	class UVerticalBox* ActionOrderBox = nullptr;
 	
 	UPROPERTY(EditAnywhere, Category="Battle|UI")
 	TSubclassOf<class UBattleActionOrderSlot> SlotClass;

@@ -102,6 +102,11 @@ void AWorldBaseUnit::RefreshEquipmentVisuals()
 	if (!EquipSub) return;
 
 	UWeaponDataAsset* WeaponDA = EquipSub->GetEquippedWeapon(PartyIndex);
+	if (!WeaponDA && UnitData)
+	{
+		WeaponDA = UnitData->DefaultWeapon;
+	}
+
 	if (WeaponDA && WeaponDA->WeaponMesh)
 	{
 		WeaponMeshComp->SetStaticMesh(WeaponDA->WeaponMesh);
@@ -115,9 +120,13 @@ void AWorldBaseUnit::RefreshEquipmentVisuals()
 
 	if (USkeletalMeshComponent* Skel = GetMesh())
 	{
-		if (WeaponHoldSocketName != NAME_None && Skel->DoesSocketExist(WeaponHoldSocketName))
+		const FName AttachSocket = (WeaponHoldSocketName != NAME_None)
+			? WeaponHoldSocketName
+			: (UnitData ? UnitData->WeaponAttachSocketName : NAME_None);
+
+		if (AttachSocket != NAME_None && Skel->DoesSocketExist(AttachSocket))
 		{
-			WeaponMeshComp->AttachToComponent(Skel, FAttachmentTransformRules::KeepRelativeTransform, WeaponHoldSocketName);
+			WeaponMeshComp->AttachToComponent(Skel, FAttachmentTransformRules::SnapToTargetIncludingScale, AttachSocket);
 		}
 		else
 		{

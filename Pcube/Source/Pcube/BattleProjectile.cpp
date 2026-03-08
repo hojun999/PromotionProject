@@ -37,6 +37,12 @@ void ABattleProjectile::InitProjectile(ABattleBaseUnit* InSource, ABattleBaseUni
 	SourceUnit = InSource;
 	TargetUnit = InTarget;
 	Damage = InDamage;
+
+	if (TargetUnit)
+	{
+		TargetUnit->OnUnitDied.RemoveDynamic(this, &ABattleProjectile::HandleTargetUnitDied);
+		TargetUnit->OnUnitDied.AddDynamic(this, &ABattleProjectile::HandleTargetUnitDied);
+	}
 	
 	// 호밍: 타겟이 있으면 가속으로 따라가게
 	if (MoveComp && TargetUnit)
@@ -67,8 +73,21 @@ void ABattleProjectile::OnOverlap(UPrimitiveComponent* OverlappedComp, AActor* O
 	Destroy();
 }
 
+void ABattleProjectile::HandleTargetUnitDied()
+{
+	if (!bResolved)
+	{
+		Destroy();
+	}
+}
+
 void ABattleProjectile::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
+	if (TargetUnit)
+	{
+		TargetUnit->OnUnitDied.RemoveDynamic(this, &ABattleProjectile::HandleTargetUnitDied);
+	}
+
 	Super::EndPlay(EndPlayReason);
 	
 	// 수명 종료 / 강제 제거 등으로 충돌 없이 사라지는 경우도 처리 완료로 처리

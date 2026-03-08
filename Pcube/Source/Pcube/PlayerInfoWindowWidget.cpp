@@ -2,6 +2,8 @@
 
 #include "PlayerInfoWindowWidget.h"
 
+#include "PlayerInfoEquipButtonWidget.h"
+
 #include "EquipmentSubsystem.h"
 #include "BattleInfoTransferSubsystem.h"
 #include "UnitDataAsset.h"
@@ -10,6 +12,8 @@
 #include "Components/Button.h"
 #include "Components/TextBlock.h"
 #include "Components/Image.h"
+#include "Components/CanvasPanel.h"
+#include "Components/CanvasPanelSlot.h"
 
 void UPlayerInfoWindowWidget::NativeConstruct()
 {
@@ -118,6 +122,12 @@ void UPlayerInfoWindowWidget::HandleArmorSlotClicked()
 	BP_OpenArmorModWindow(SelectedPartyIndex);
 }
 
+void UPlayerInfoWindowWidget::HandleEquipmentButtonClicked(FName EquipmentKey)
+{
+	// 동적 장비 버튼(빨간 박스) 클릭 -> BP에서 부품 장착 창을 띄우는 구조
+	BP_OpenEquipmentPartsSelectionWindow(SelectedPartyIndex, EquipmentKey);
+}
+
 void UPlayerInfoWindowWidget::HandleEquipmentChanged(int32 PartyIndex)
 {
 	// 지금 UI는 선택된 파티원만 즉시 갱신
@@ -157,6 +167,13 @@ void UPlayerInfoWindowWidget::RefreshPortraitButtons()
 		{
 			if (DA0->PortraitTexture) Img_Portrait0->SetBrushFromTexture(DA0->PortraitTexture);
 			else if (DA0->UnitIcon) Img_Portrait0->SetBrushFromTexture(DA0->UnitIcon);
+			else Img_Portrait0->SetBrushFromTexture(nullptr);
+			Img_Portrait0->SetVisibility(ESlateVisibility::Visible);
+		}
+		else
+		{
+			Img_Portrait0->SetBrushFromTexture(nullptr);
+			Img_Portrait0->SetVisibility(ESlateVisibility::Hidden);
 		}
 		Img_Portrait0->SetRenderOpacity(SelectedPartyIndex == 0 ? 1.f : 0.35f);
 	}
@@ -173,6 +190,13 @@ void UPlayerInfoWindowWidget::RefreshPortraitButtons()
 		{
 			if (DA1->PortraitTexture) Img_Portrait1->SetBrushFromTexture(DA1->PortraitTexture);
 			else if (DA1->UnitIcon) Img_Portrait1->SetBrushFromTexture(DA1->UnitIcon);
+			else Img_Portrait1->SetBrushFromTexture(nullptr);
+			Img_Portrait1->SetVisibility(ESlateVisibility::Visible);
+		}
+		else
+		{
+			Img_Portrait1->SetBrushFromTexture(nullptr);
+			Img_Portrait1->SetVisibility(ESlateVisibility::Hidden);
 		}
 		Img_Portrait1->SetRenderOpacity(SelectedPartyIndex == 1 ? 1.f : 0.35f);
 	}
@@ -187,9 +211,13 @@ void UPlayerInfoWindowWidget::RefreshSelectedMemberPanel()
 	{
 		if (UnitDA)
 		{
-			// 우선순위: UnitIcon(보통 큰 이미지) -> PortraitTexture
 			if (UnitDA->UnitIcon) Img_Illustration->SetBrushFromTexture(UnitDA->UnitIcon);
 			else if (UnitDA->PortraitTexture) Img_Illustration->SetBrushFromTexture(UnitDA->PortraitTexture);
+			else Img_Illustration->SetBrushFromTexture(nullptr);
+		}
+		else
+		{
+			Img_Illustration->SetBrushFromTexture(nullptr);
 		}
 	}
 
@@ -204,13 +232,72 @@ void UPlayerInfoWindowWidget::RefreshSelectedMemberPanel()
 				WeaponIcon = Weapon->Icon;
 			}
 		}
-		if (WeaponIcon) Img_WeaponIcon->SetBrushFromTexture(WeaponIcon);
+		Img_WeaponIcon->SetBrushFromTexture(WeaponIcon);
 	}
 
 	// Armor는 아직 별도 데이터가 없어서 기본은 비워둠(원하면 UnitDA 쪽에 ArmorIcon을 추가해서 연결)
 	// Img_ArmorIcon은 WBP에만 넣어두고 나중에 확장 가능
 
+	// 동적 장비 버튼(빨간 박스 영역) 재구성
+	RebuildEquipmentButtons();
+
 	RefreshStatsPanel();
+}
+
+void UPlayerInfoWindowWidget::RebuildEquipmentButtons()
+{
+	if (!Canvas_EquipButtons) return;
+
+	Canvas_EquipButtons->ClearChildren();
+
+	UUnitDataAsset* UnitDA = GetPartyUnitData(SelectedPartyIndex);
+	if (!UnitDA) return;
+	if (!EquipButtonWidgetClass) return;
+
+	for (const FPlayerInfoEquipmentButtonDef& Def : UnitDA->PlayerInfoEquipButtons)
+	{
+		if (Def.EquipmentKey.IsNone()) continue;
+
+		UPlayerInfoEquipButtonWidget* W = CreateWidget<UPlayerInfoEquipButtonWidget>(GetOwningPlayer(), EquipButtonWidgetClass);
+		if (!W) continue;
+
+		UTexture2D* Icon = Def.IconOverride;
+		if (!Icon)
+		{
+			// Weapon icon auto-resolve
+			if (Def.Kind == EPlayerInfoEquipmentKind::Weapon)
+			{
+				UWeaponDataAsset* Weapon = nullptr;
+				if (EquipmentSubsystem)
+				{
+					Weapon = EquipmentSubsystem->GetEquippedWeapon(SelectedPartyIndex);
+				}
+				if (!Weapon && Def.WeaponOverride)
+				{
+					Weapon = Def.WeaponOverride;
+				}
+				// UnitDA에 DefaultWeapon 필드가 있는 프로젝트(고정 장비 정책)라면 여기서 추가 폴백을 걸어도 됨.
+				// (없다면 컴파일 에러가 날 수 있으므로, 이 라인은 프로젝트 상황에 맞게 유지/제거)
+				if (!Weapon)
+				{
+					// NOTE: DefaultWeapon은 별도 패치에서 추가된 필드
+					// Weapon = UnitDA->DefaultWeapon;
+				}
+				if (Weapon) Icon = Weapon->Icon;
+			}
+		}
+
+		W->Init(Def.EquipmentKey, Icon);
+		W->OnClicked.RemoveDynamic(this, &UPlayerInfoWindowWidget::HandleEquipmentButtonClicked);
+		W->OnClicked.AddDynamic(this, &UPlayerInfoWindowWidget::HandleEquipmentButtonClicked);
+
+		UCanvasPanelSlot* CanvasPanelSlot = Canvas_EquipButtons->AddChildToCanvas(W);
+		CanvasPanelSlot->SetAutoSize(false);
+		CanvasPanelSlot->SetAnchors(FAnchors(Def.UIAnchor.X, Def.UIAnchor.Y, Def.UIAnchor.X, Def.UIAnchor.Y));
+		CanvasPanelSlot->SetAlignment(FVector2D(0.5f, 0.5f));
+		CanvasPanelSlot->SetPosition(Def.UIPixelOffset);
+		CanvasPanelSlot->SetSize(Def.UISize);
+	}
 }
 
 void UPlayerInfoWindowWidget::RefreshStatsPanel()
@@ -257,10 +344,13 @@ void UPlayerInfoWindowWidget::RefreshStatsPanel()
 			Text_Effects->SetText(FText::FromString(FString::Join(Lines, TEXT("\n"))));
 		}
 
-		const float FinalDmgMul = (1.f + E.DamageMulAdd) * E.DamageMulMul;
 		if (Text_Proj) Text_Proj->SetText(FText::FromString(FString::Printf(TEXT("Proj %+d"), E.BonusProjectileCount)));
 		if (Text_Hit) Text_Hit->SetText(FText::FromString(FString::Printf(TEXT("Hit %+d"), E.BonusHitCount)));
-		if (Text_DmgMul) Text_DmgMul->SetText(FText::FromString(FString::Printf(TEXT("DmgMul x%.2f"), FinalDmgMul)));
+		if (Text_DmgMul)
+		{
+			Text_DmgMul->SetText(FText::FromString(
+				FString::Printf(TEXT("DmgAdd %+0.2f / DmgMul x%.2f"), E.DamageMulAdd, E.DamageMulMul)));
+		}
 	}
 	else
 	{

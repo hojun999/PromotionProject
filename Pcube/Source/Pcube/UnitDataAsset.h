@@ -9,6 +9,7 @@
 
 class ABattleBaseUnit;
 class USkillDataAsset;
+class UWeaponDataAsset;
 class UAnimMontage;
 class UParticleSystem;
 
@@ -27,9 +28,45 @@ struct FUnitBaseStats
 	float AttackPower = 10.f;
 };
 
-/**
- * 
- */
+UENUM(BlueprintType)
+enum class EPlayerInfoEquipmentKind : uint8
+{
+	Weapon UMETA(DisplayName="Weapon"),
+	Armor UMETA(DisplayName="Armor"),
+};
+
+USTRUCT(BlueprintType)
+struct FPlayerInfoEquipmentButtonDef
+{
+	GENERATED_BODY()
+	
+	// 예: WeaponMain, ArmorBody, Accessory
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Equipment")
+	FName EquipmentKey = NAME_None;
+	
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Equipment")
+	EPlayerInfoEquipmentKind Kind = EPlayerInfoEquipmentKind::Weapon;
+	
+	// 무기인 경우, 특정 무기를 명시하고 싶을 때 사용 - 없으면 Subsystem 장착 무기 아이콘 사용
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Equipment")
+	TObjectPtr<UWeaponDataAsset> WeaponOverride = nullptr;
+	
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="UI")
+	TObjectPtr<UTexture2D> IconOverride = nullptr;
+	
+	// 0~1 정규화
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="UI", meta=(ClampMin="0.0", ClampMax="1.0"))
+	FVector2D UIAnchor = FVector2D(0.5f, 0.5f);
+
+	// 앵커 기준 픽셀 오프셋
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="UI")
+	FVector2D UIPixelOffset = FVector2D(0.f, 0.f);
+
+	// 버튼 크기(px)
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="UI")
+	FVector2D UISize = FVector2D(64.f, 64.f);
+};
+
 UCLASS()
 class PCUBE_API UUnitDataAsset : public UPrimaryDataAsset
 {
@@ -67,7 +104,9 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Visual|World")
 	UStaticMesh* DeadStaticMesh;
 	
-	// ---
+	// --- 월드 UI ---
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="UI|PlayerInfo")
+	TArray<FPlayerInfoEquipmentButtonDef> PlayerInfoEquipButtons;
 	
 	// 전투용 정보 (전투 레벨에서 소환할 블루프린트 클래스)
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Battle")
@@ -92,7 +131,6 @@ public:
 	// 스킬이 공용(예: BasicAttackData)이어도 유닛마다 다른 몽타주를 재생하기 위한 오버라이드
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Visual|Battle")
 	TMap<USkillDataAsset*, UAnimMontage*> SkillMontageOverrides;
-	
 
 	// 투사체 스킬이 공용이어도 유닛마다 다른 발사 소켓을 쓰고 싶을 때 오버라이드
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Visual|Battle")

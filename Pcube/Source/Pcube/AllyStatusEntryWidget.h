@@ -42,9 +42,6 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="SkillPoints|UI")
 	FLinearColor SkillPointEmptyColor = FLinearColor(0.25f, 0.25f, 0.25f, 0.26f); // 미보유 SP 색
 	
-	// UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="SkillPoints|UI")
-	// FMargin SkillPointPadding = FMargin(2.f, 0.f); // 아이콘 사이 간격
-	
 private:
 	UPROPERTY() TObjectPtr<ABattleBaseUnit> Unit; // 이 Widget이 표시하는 유닛
 	

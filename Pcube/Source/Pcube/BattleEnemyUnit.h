@@ -30,7 +30,7 @@ class PCUBE_API ABattleEnemyUnit : public ABattleBaseUnit
 	GENERATED_BODY()
 	
 public:
-	UPROPERTY(EditAnywhere, Category="Drop")
+	UPROPERTY(EditAnywhere, Category="Drop", meta=(DeprecatedProperty, DeprecationMessage="Use SpawnDataAsset loot settings instead."))
 	TArray<FDropInfo> DropTable;
 	
 	virtual void Die() override;

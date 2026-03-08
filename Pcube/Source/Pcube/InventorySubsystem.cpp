@@ -3,12 +3,13 @@
 
 #include "InventorySubsystem.h"
 
-void UInventorySubsystem::AddItem(UItemDataAsset* Item, int32 Amount)
+int32 UInventorySubsystem::AddItem(UItemDataAsset* Item, int32 Amount)
 {
-	if (!Item || Amount <= 0) return;
+	if (!Item || Amount <= 0) return 0;
 	
 	bool bChanged = false;
 	int32 Remaining = Amount;
+	int32 AddedTotal = 0;
 	
 	auto AddNewStack = [&](int32 Qty) -> bool
 	{
@@ -18,12 +19,12 @@ void UInventorySubsystem::AddItem(UItemDataAsset* Item, int32 Amount)
 		NewStack.Item = Item;
 		NewStack.Quantity = Qty;
 		Stacks.Add(NewStack);
+		AddedTotal += Qty;
 		return true;
 	};
 	
 	if (Item->bStackable)
 	{
-		// 기존 스택 채우기
 		for (FInventoryStack& S : Stacks)
 		{
 			if (S.Item == Item && S.Quantity < Item->MaxStack)
@@ -34,13 +35,13 @@ void UInventorySubsystem::AddItem(UItemDataAsset* Item, int32 Amount)
 				{
 					S.Quantity += ToAdd;
 					Remaining -= ToAdd;
+					AddedTotal += ToAdd;
 					bChanged = true;
 					if (Remaining <= 0) break;
 				}
 			}
 		}
 		
-		// 새 스택 생성
 		while (Remaining > 0)
 		{
 			const int32 ToAdd = FMath::Min(Item->MaxStack, Remaining);
@@ -51,7 +52,6 @@ void UInventorySubsystem::AddItem(UItemDataAsset* Item, int32 Amount)
 	}
 	else
 	{
-		// 비스택 아이템: 1개당 1슬롯
 		while (Remaining > 0)
 		{
 			if (!AddNewStack(1)) break;
@@ -65,7 +65,7 @@ void UInventorySubsystem::AddItem(UItemDataAsset* Item, int32 Amount)
 		OnInventoryChanged.Broadcast();
 	}
 	
-	// Remaining > 0 이면 슬롯 부족으로 일부 실패
+	return AddedTotal;
 }
 
 bool UInventorySubsystem::RemoveItem(UItemDataAsset* Item, int32 Amount)
@@ -109,4 +109,9 @@ int32 UInventorySubsystem::GetQuantity(UItemDataAsset* Item) const
 		}
 	}
 	return Sum;
+}
+
+int32 UInventorySubsystem::GetFreeSlotCount() const
+{
+	return FMath::Max(0, MaxSlots - Stacks.Num());
 }

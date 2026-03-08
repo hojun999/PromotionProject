@@ -62,6 +62,11 @@ public:
 	
 protected:
 	virtual void NativeConstruct() override;
+
+	// 현재 유닛의 기본공격 스킬을 반환한다.
+	// 규칙: UnitData->SkillList[0]을 기본 공격으로 간주.
+	// (구버전 호환) SkillList가 비어있으면 BasicAttackData(수동 지정)를 fallback으로 사용.
+	USkillDataAsset* GetBasicAttackForCurrentUnit() const;
 	
 	// --- 메인 버튼 ---
 	UPROPERTY(meta = (BindWidget))

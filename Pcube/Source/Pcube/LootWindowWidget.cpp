@@ -45,7 +45,7 @@ void ULootWindowWidget::HandleClose()
 	{
 		if (AWorldHUD* WHUD = Cast<AWorldHUD>(PC->GetHUD()))
 		{
-			WHUD->HideLootWindow(); // // HUD가 InputMode 복구까지 담당
+			WHUD->HideLootWindow();
 			return;
 		}
 	}
@@ -61,7 +61,6 @@ void ULootWindowWidget::RebuildGrid()
 
 	Grid_Loot->ClearChildren();
 
-	// 항상 8칸 생성(2x4)
 	const int32 TotalSlots = 8;
 
 	TArray<FLootStack> Loot;
@@ -103,15 +102,16 @@ void ULootWindowWidget::HandleSlotClicked(int32 SlotIndex)
 	UInventorySubsystem* Inv = GI->GetSubsystem<UInventorySubsystem>();
 	if (!Inv) return;
 
-	FLootStack Taken;
-	if (!Corpse->TakeLootAt(SlotIndex, Taken))
-	{
-		return;
-	}
+	const TArray<FLootStack>& Loot = Corpse->GetLootItems();
+	if (!Loot.IsValidIndex(SlotIndex)) return;
 
-	// 인벤으로 이동
-	Inv->AddItem(Taken.Item, Taken.Count);
+	const FLootStack& Stack = Loot[SlotIndex];
+	if (!Stack.Item || Stack.Count <= 0) return;
 
+	const int32 Added = Inv->AddItem(Stack.Item, Stack.Count);
+	if (Added <= 0) return;
+
+	Corpse->RemoveLootCountAt(SlotIndex, Added);
 	HandleLootChangedAfterTake();
 }
 
@@ -125,15 +125,18 @@ void ULootWindowWidget::HandleTakeAll()
 	UInventorySubsystem* Inv = GI->GetSubsystem<UInventorySubsystem>();
 	if (!Inv) return;
 
-	TArray<FLootStack> TakenAll;
-	Corpse->TakeAllLoot(TakenAll);
-
-	for (const FLootStack& S : TakenAll)
+	for (int32 i = Corpse->GetLootItems().Num() - 1; i >= 0; --i)
 	{
-		if (S.Item && S.Count > 0)
-		{
-			Inv->AddItem(S.Item, S.Count);
-		}
+		const TArray<FLootStack>& Loot = Corpse->GetLootItems();
+		if (!Loot.IsValidIndex(i)) continue;
+
+		const FLootStack& Stack = Loot[i];
+		if (!Stack.Item || Stack.Count <= 0) continue;
+
+		const int32 Added = Inv->AddItem(Stack.Item, Stack.Count);
+		if (Added <= 0) continue;
+
+		Corpse->RemoveLootCountAt(i, Added);
 	}
 
 	HandleLootChangedAfterTake();
@@ -141,16 +144,12 @@ void ULootWindowWidget::HandleTakeAll()
 
 void ULootWindowWidget::HandleLootChangedAfterTake()
 {
-	// 비었으면 시체 제거 + 창 닫기
 	if (IsValid(Corpse) && Corpse->IsEmpty())
 	{
 		ALootCorpseActor* ToDestroy = Corpse;
 		Corpse = nullptr;
 
-		// HUD 닫기
 		HandleClose();
-
-		// 시체 제거(Transfer에는 이미 MarkLooted가 저장됨)
 		ToDestroy->Destroy();
 		return;
 	}

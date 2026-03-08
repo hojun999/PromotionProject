@@ -25,6 +25,12 @@ void UBattleActionMenu::NativeConstruct()
 		Btn_Skill->OnClicked.AddDynamic(this, &UBattleActionMenu::OnSkillMenuClicked);
 	}
 	
+	if (Btn_Item)
+	{
+		Btn_Item->OnClicked.RemoveDynamic(this, &UBattleActionMenu::OnItemMenuClicked);
+		Btn_Item->OnClicked.AddDynamic(this, &UBattleActionMenu::OnItemMenuClicked);
+	}
+	
 	if (SkillListWidget)
 	{
 		SkillListWidget->SetVisibility(ESlateVisibility::Collapsed);
@@ -58,27 +64,20 @@ void UBattleActionMenu::SetMainButtonsVisibility(ESlateVisibility NewVis)
 void UBattleActionMenu::ApplyView()
 {
 	// View 상태에 따라 3버튼과 리스트들의 Visibility를 일괄 갱신
-	if (!SkillListWidget || !ItemListWidget) return;
+	SetMainButtonsVisibility(CurrentView == EActionMenuView::Main ? ESlateVisibility::Visible : ESlateVisibility::Collapsed);
 	
-	switch (CurrentView)
+	if (SkillListWidget)
 	{
-	case EActionMenuView::Main:
-		SetMainButtonsVisibility(ESlateVisibility::Visible);
-		SkillListWidget->SetVisibility(ESlateVisibility::Collapsed);
-		ItemListWidget->SetVisibility(ESlateVisibility::Collapsed);
-		break;
-
-	case EActionMenuView::SkillList:
-		SetMainButtonsVisibility(ESlateVisibility::Collapsed);
-		SkillListWidget->SetVisibility(ESlateVisibility::Visible);
-		ItemListWidget->SetVisibility(ESlateVisibility::Collapsed);
-		break;
-
-	case EActionMenuView::ItemList:
-		SetMainButtonsVisibility(ESlateVisibility::Collapsed);
-		SkillListWidget->SetVisibility(ESlateVisibility::Collapsed);
-		ItemListWidget->SetVisibility(ESlateVisibility::Visible);
-		break;
+		SkillListWidget->SetVisibility(CurrentView == EActionMenuView::SkillList
+			? ESlateVisibility::Visible
+			: ESlateVisibility::Collapsed);
+	}
+	
+	if (ItemListWidget)
+	{
+		ItemListWidget->SetVisibility(CurrentView == EActionMenuView::ItemList
+			? ESlateVisibility::Visible
+			: ESlateVisibility::Collapsed);
 	}
 }
 
@@ -92,6 +91,7 @@ void UBattleActionMenu::ShowMenu(ABattleAllyUnit* TargetUnit)
 	ApplyView();
 	
 	// 서브 메뉴들은 일단 숨김
+	
 	
 	// 턴 시작 때마다 스킬 목록 갱신
 	RebuildSkillList();
@@ -168,12 +168,50 @@ void UBattleActionMenu::NativeTick(const FGeometry& MyGeometry, float InDeltaTim
 void UBattleActionMenu::OnAttackClicked()
 {
 	UE_LOG(LogTemp, Warning, TEXT("[ActionMenu] Attack clicked."));
-	
-	// 공격은 PC에서 HUD->HideActionMenu() 호출 중이므로 여기서는 브로드캐스트만
-	if (IsValid(BasicAttackData))
+
+	// 기본 공격은 "현재 유닛"의 SkillList[0]을 사용한다.
+	// (구버전 호환) SkillList가 비어있으면 BasicAttackData(수동 지정)를 fallback.
+	USkillDataAsset* BasicAtk = GetBasicAttackForCurrentUnit();
+	if (!IsValid(BasicAtk))
 	{
-		OnActionRequested.Broadcast(BasicAttackData);
+		ShowTempFeedbackMessage(TEXT("기본 공격 스킬이 지정되지 않았습니다."), 1.7f);
+		UE_LOG(LogTemp, Error, TEXT("[ActionMenu] Basic attack skill is null. unit=%s"), *GetNameSafe(CurrentUnit));
+		return;
 	}
+
+	// (선택) 기본 공격도 SP 비용을 사용할 수 있으므로 동일하게 검사
+	if (!IsValid(CurrentUnit) || !CurrentUnit->CanUseSkill(BasicAtk))
+	{
+		const int32 CurSP = IsValid(CurrentUnit) ? CurrentUnit->GetCurrentSkillPoints() : 0;
+		const int32 MaxSP = IsValid(CurrentUnit) ? CurrentUnit->GetMaxSkillPoints() : 0;
+		const int32 Cost  = BasicAtk->SkillPointCost;
+
+		ShowTempFeedbackMessage(
+			FString::Printf(TEXT("스킬 포인트가 부족합니다: %s (필요 %d / 현재 %d/%d)"), *BasicAtk->SkillName, Cost, CurSP, MaxSP),
+			1.7f);
+		return;
+	}
+
+	UE_LOG(LogTemp, Warning, TEXT("[ActionMenu] BasicAtk=%s path=%s"),
+		*GetNameSafe(BasicAtk), BasicAtk ? *BasicAtk->GetPathName() : TEXT("None"));
+
+	// 공격은 PC에서 HUD->HideActionMenu() 호출 중이므로 여기서는 브로드캐스트만
+	OnActionRequested.Broadcast(BasicAtk);
+}
+
+USkillDataAsset* UBattleActionMenu::GetBasicAttackForCurrentUnit() const
+{
+	if (IsValid(CurrentUnit) && IsValid(CurrentUnit->UnitData))
+	{
+		const TArray<USkillDataAsset*>& Skills = CurrentUnit->UnitData->SkillList;
+		if (Skills.Num() > 0 && IsValid(Skills[0]))
+		{
+			return Skills[0];
+		}
+	}
+
+	// 구버전 호환: 메뉴 자체에 수동 지정된 BasicAttackData가 있으면 fallback
+	return BasicAttackData;
 }
 
 void UBattleActionMenu::OnSkillMenuClicked()
@@ -189,32 +227,32 @@ void UBattleActionMenu::HandleSkillSlotClicked(USkillDataAsset* Skill)
 {
 	if (!IsValid(Skill)) return;
 	
-	// SP가 부족하면 메시지 출력 + 스킬리스트 유지
+	// SP 부족 여부를 먼저 검사, 부족하면 스킬 리스트 유지
+	// SP가 부족하면 메시지 출력 + 스킬리스트 유지 (아무것도 닫지 않고 return)
 	if (!IsValid(CurrentUnit) || !CurrentUnit->CanUseSkill(Skill))
 	{
 		const int32 CurSP = IsValid(CurrentUnit) ? CurrentUnit->GetCurrentSkillPoints() : 0;
 		const int32 MaxSP = IsValid(CurrentUnit) ? CurrentUnit->GetMaxSkillPoints() : 0;
-		const int32 Cost = Skill->SkillPointCost;
-		
+		const int32 Cost  = Skill->SkillPointCost;
+
 		const FString Msg = FString::Printf(
 			TEXT("스킬 포인트가 부족합니다: %s (필요 %d / 현재 %d/%d)"),
 			*Skill->SkillName, Cost, CurSP, MaxSP
-			);
-		
+		);
+
 		ShowTempFeedbackMessage(Msg, 1.7f);
-		return; // 리스트/뷰 상태 유지
+		return; // ✅ 리스트/뷰 상태 유지
 	}
 	
 	// 스킬 선택은 확정이므로, 리스트만 닫고 메인 버튼을 다시 보여주지 않음
 	// -> 공격 버튼과 동일하게 메뉴 자체를 숨겨서 중복 입력을 근본 차단
 	CurrentView = EActionMenuView::Main; // 다음번 ShowMenu에서 정상 복구될 수 있게 내부 상태는 메인으로
 	ApplyView();
-	
-	// bIsFollowingUnit = false;                 // 타겟 선택/연출 동안 UI 위치 추적 중단
-	// SetVisibility(ESlateVisibility::Collapsed); // 스킬 확정 후 액션 메뉴 숨김(중복 클릭 방지)
 
 	OnSkillRequested.Broadcast(Skill);
 }
+
+
 
 void UBattleActionMenu::OnItemMenuClicked()
 {

@@ -9,7 +9,6 @@
 #include "Engine/Engine.h"
 #include "GameFramework/PlayerController.h"
 
-// Sets default values
 ALootCorpseActor::ALootCorpseActor()
 {
 	PrimaryActorTick.bCanEverTick = false;
@@ -28,7 +27,6 @@ ALootCorpseActor::ALootCorpseActor()
 	InteractBox->SetCollisionResponseToChannel(ECC_Pawn, ECR_Overlap);
 }
 
-// Called when the game starts or when spawned
 void ALootCorpseActor::BeginPlay()
 {
 	Super::BeginPlay();
@@ -62,7 +60,6 @@ void ALootCorpseActor::OnInteractBeginOverlap(UPrimitiveComponent* Overlapped, A
 	APlayerController* PC = Cast<APlayerController>(Pawn->GetController());
 	if (!PC) return;
 
-	// 입력 바인딩을 위해서는 EnableInput이 필요
 	EnableInput(PC);
 	
 	if (InputComponent && InputComponent != BoundInputComponent)
@@ -92,7 +89,6 @@ void ALootCorpseActor::OnInteractEndOverlap(UPrimitiveComponent* Overlapped, AAc
 
 void ALootCorpseActor::OpenLootUI()
 {
-	// 이미 비어있으면 그냥 제거
 	if (IsEmpty())
 	{
 		SaveLootState();
@@ -106,33 +102,37 @@ void ALootCorpseActor::OpenLootUI()
 	AWorldHUD* WHUD = Cast<AWorldHUD>(PC->GetHUD());
 	if (!WHUD) return;
 	
-	WHUD->ShowLootWindow(this); // WorldHUD가 루팅창 생성&표시 + InputMode/UI 처리
+	WHUD->ShowLootWindow(this);
 }
 
-bool ALootCorpseActor::TakeLootAt(int32 Index, FLootStack& OutTaken)
+int32 ALootCorpseActor::RemoveLootCountAt(int32 Index, int32 Count, FLootStack* OutRemoved)
 {
-	if (!LootItems.IsValidIndex(Index)) return false;
-	if (!LootItems[Index].Item || LootItems[Index].Count <= 0) return false;
-	
-	OutTaken = LootItems[Index];
-	LootItems.RemoveAt(Index);
-	
+	if (!LootItems.IsValidIndex(Index)) return 0;
+	if (!LootItems[Index].Item || LootItems[Index].Count <= 0 || Count <= 0) return 0;
+
+	FLootStack& Stack = LootItems[Index];
+	const int32 RemovedCount = FMath::Min(Count, Stack.Count);
+	if (RemovedCount <= 0) return 0;
+
+	if (OutRemoved)
+	{
+		OutRemoved->Item = Stack.Item;
+		OutRemoved->Count = RemovedCount;
+	}
+
+	Stack.Count -= RemovedCount;
+	if (Stack.Count <= 0)
+	{
+		LootItems.RemoveAt(Index);
+	}
+
 	CompactLoot();
 	SaveLootState();
-	return true;
-}
-
-void ALootCorpseActor::TakeAllLoot(TArray<FLootStack>& OutTakenAll)
-{
-	OutTakenAll = LootItems;
-	LootItems.Empty();
-	
-	SaveLootState();
+	return RemovedCount;
 }
 
 void ALootCorpseActor::CompactLoot()
 {
-	// 빈 / 수량 0 아이템 제거 + 앞으로 당겨서 UI 위치 정렬
 	for (int32 i = LootItems.Num() - 1; i >= 0; --i)
 	{
 		if (!LootItems[i].Item || LootItems[i].Count <= 0)
@@ -141,7 +141,6 @@ void ALootCorpseActor::CompactLoot()
 		}
 	}
 	
-	// 루트 슬롯 최대 8칸 제한 - 초과는 뒤에서 잘라냄
 	if (LootItems.Num() > 8)
 	{
 		LootItems.SetNum(8);
@@ -158,10 +157,10 @@ void ALootCorpseActor::SaveLootState()
 	
 	if (IsEmpty())
 	{
-		Transfer->MarkEncounterLooted(EncounterID); // 루팅 완료 => 다음 월드 로드 시 시체 스폰 X
+		Transfer->MarkEncounterLooted(EncounterID);
 	}
 	else
 	{
-		Transfer->SetEncounterLoot(EncounterID, LootItems); // 잔여 루팅 저장
+		Transfer->SetEncounterLoot(EncounterID, LootItems);
 	}
 }

@@ -31,13 +31,16 @@ public:
 	FOnInventoryChanged OnInventoryChanged; // UI 갱신 이벤트
 	
 	UFUNCTION(BlueprintCallable, Category="Inventory")
-	void AddItem(UItemDataAsset* Item, int32 Amount); // 아이템 추가 - 스택 합산
+	int32 AddItem(UItemDataAsset* Item, int32 Amount); // 실제로 추가된 수량 반환
 	
 	UFUNCTION(BlueprintCallable, Category="Inventory")
 	bool RemoveItem(UItemDataAsset* Item, int32 Amount); // 아이템 제거 - 수량 부족이면 실패
 	
 	UFUNCTION(BlueprintCallable, Category="Inventory")
 	int32 GetQuantity(UItemDataAsset* Item) const; // 특정 아이템 보유 수량 조회
+
+	UFUNCTION(BlueprintCallable, Category="Inventory")
+	int32 GetFreeSlotCount() const; // 장비/루팅 안전성 체크용
 	
 	UFUNCTION(BlueprintCallable, Category="Inventory")
 	const TArray<FInventoryStack>& GetAllStacks() const { return Stacks; } // UI 표시용

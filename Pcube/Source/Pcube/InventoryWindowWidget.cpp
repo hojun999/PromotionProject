@@ -4,9 +4,11 @@
 #include "InventoryWindowWidget.h"
 #include "InventorySubsystem.h"
 #include "InventorySlotWidget.h"
+#include "WorldHUD.h"
 #include "Components/UniformGridPanel.h"
 #include "Components/Button.h"
 #include "Components/TextBlock.h"
+#include "GameFramework/PlayerController.h"
 
 void UInventoryWindowWidget::NativeConstruct()
 {
@@ -19,6 +21,7 @@ void UInventoryWindowWidget::NativeConstruct()
 
 	if (Inv)
 	{
+		Inv->OnInventoryChanged.RemoveDynamic(this, &UInventoryWindowWidget::HandleInventoryChanged);
 		Inv->OnInventoryChanged.AddDynamic(this, &UInventoryWindowWidget::HandleInventoryChanged);
 	}
 
@@ -63,12 +66,19 @@ void UInventoryWindowWidget::Close()
 
 void UInventoryWindowWidget::HandleCloseClicked()
 {
+	if (APlayerController* PC = GetOwningPlayer())
+	{
+		if (AWorldHUD* WHUD = Cast<AWorldHUD>(PC->GetHUD()))
+		{
+			WHUD->HideInventory();
+			return;
+		}
+	}
 	Close();
 }
 
 void UInventoryWindowWidget::HandleInventoryChanged()
 {
-	// 페이지 범위 보정
 	if (!Inv) return;
 
 	const int32 Total = Inv->GetAllStacks().Num();
@@ -105,7 +115,6 @@ void UInventoryWindowWidget::RebuildGrid()
 
 	const int32 Start = PageIndex * SlotsPerPage;
 
-	// 없으면 빈 그리드만 보여줌
 	const TArray<FInventoryStack>* StacksPtr = nullptr;
 	if (Inv)
 	{
@@ -124,11 +133,11 @@ void UInventoryWindowWidget::RebuildGrid()
 		if (StacksPtr && StacksPtr->IsValidIndex(StackIndex))
 		{
 			const FInventoryStack& S = (*StacksPtr)[StackIndex];
-			InventorySlot->InitFilled(S.Item, S.Quantity, i);
+			InventorySlot->InitFilled(S.Item, S.Quantity, StackIndex);
 		}
 		else
 		{
-			InventorySlot->InitEmpty(i);
+			InventorySlot->InitEmpty(StackIndex);
 		}
 
 		const int32 Row = i / Cols;
@@ -153,5 +162,5 @@ void UInventoryWindowWidget::UpdatePageText()
 void UInventoryWindowWidget::HandleSlotClicked(int32 SlotIndex, UItemDataAsset* Item)
 {
 	// 인벤 창에서 클릭했을 때의 동작은 아직 미정
-	// (나중에 상세 패널/드롭/사용 등 확장)
+	// SlotIndex는 이제 페이지 기준 상대 인덱스가 아니라 인벤토리 절대 인덱스다.
 }

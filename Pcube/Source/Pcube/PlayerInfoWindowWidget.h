@@ -7,12 +7,14 @@
 #include "PlayerInfoWindowWidget.generated.h"
 
 class UButton;
+class UCanvasPanel;
 class UImage;
 class UTextBlock;
 
 class UEquipmentSubsystem;
 class UBattleInfoTransferSubsystem;
 class UUnitDataAsset;
+class UPlayerInfoEquipButtonWidget;
 
 /**
  * PlayerInfoWindow (World UI)
@@ -46,6 +48,11 @@ protected:
 
 	UFUNCTION(BlueprintImplementableEvent, Category="PlayerInfo")
 	void BP_OpenArmorModWindow(int32 PartyIndex);
+
+	// (추천) 장비 버튼 클릭 시 "부품 교환/장착" 창을 띄우는 단일 진입점
+	// EquipmentKey는 UnitDataAsset.PlayerInfoEquipButtons의 EquipmentKey 값
+	UFUNCTION(BlueprintImplementableEvent, Category="PlayerInfo")
+	void BP_OpenEquipmentPartsSelectionWindow(int32 PartyIndex, FName EquipmentKey);
 	
 private:
 	// --- UI 이벤트 ---
@@ -68,7 +75,11 @@ private:
 	int32 GetPartyCount() const;
 	UUnitDataAsset* GetPartyUnitData(int32 PartyIndex) const;
 
-	
+	// --- 동적 장비 버튼(빨간 박스 영역) ---
+	UFUNCTION()
+	void HandleEquipmentButtonClicked(FName EquipmentKey);
+
+	void RebuildEquipmentButtons();
 
 private:
 	// --- Portrait Buttons (HB_Portraits) ---
@@ -88,6 +99,11 @@ private:
 	UPROPERTY(meta=(BindWidgetOptional))
 	UImage* Img_Illustration = nullptr;
 
+	// --- 장비 버튼을 동적으로 배치할 캔버스 ---
+	// WBP_PlayerInfoWindowWidget에 CanvasPanel을 추가하고 이름을 Canvas_EquipButtons로 맞추면 자동 바인딩됨
+	UPROPERTY(meta=(BindWidgetOptional))
+	UCanvasPanel* Canvas_EquipButtons = nullptr;
+
 	// --- 스탯/효과 표시 (VB_StatTexts 내부) ---
 	UPROPERTY(meta=(BindWidgetOptional)) UTextBlock* Text_HP = nullptr;
 	UPROPERTY(meta=(BindWidgetOptional)) UTextBlock* Text_SP = nullptr;
@@ -104,6 +120,10 @@ private:
 	UPROPERTY(meta=(BindWidgetOptional)) UButton* Btn_ArmorSlot = nullptr;
 	UPROPERTY(meta=(BindWidgetOptional)) UImage* Img_WeaponIcon = nullptr;
 	UPROPERTY(meta=(BindWidgetOptional)) UImage* Img_ArmorIcon = nullptr;
+
+	// 동적 장비 버튼 위젯 클래스
+	UPROPERTY(EditAnywhere, Category="PlayerInfo|UI")
+	TSubclassOf<UPlayerInfoEquipButtonWidget> EquipButtonWidgetClass;
 
 private:
 	UPROPERTY() TObjectPtr<UEquipmentSubsystem> EquipmentSubsystem = nullptr;

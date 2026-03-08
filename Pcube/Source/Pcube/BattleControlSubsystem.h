@@ -116,8 +116,6 @@ public:
 	
 	
 protected:
-	void OnBattleSetupFinished();
-	
 	void HandleEnemyAI(ABattleBaseUnit* EnemyUnit);
 	
 	EBattleState CurrentState;
@@ -141,7 +139,10 @@ private:
 	
 	int32 GetAliveUnitCount(const TArray<AActor*>& UnitList);
 	
-	void RebuildAavilableEnemyTargetsByRule();
+	void RebuildAvailableTargetsByRule();
+	const TArray<AActor*>& GetFriendlyUnitsFor(const ABattleBaseUnit* ActingUnit) const;
+	const TArray<AActor*>& GetOpposingUnitsFor(const ABattleBaseUnit* ActingUnit) const;
+	void AddAliveUnitsFrom(const TArray<AActor*>& Src, TArray<AActor*>& OutTargets) const;
 	
 	UPROPERTY()
 	TArray<AActor*> AvailableTargets;

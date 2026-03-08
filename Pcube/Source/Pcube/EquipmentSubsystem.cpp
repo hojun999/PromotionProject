@@ -30,29 +30,60 @@ const FWeaponModSlotDef* UEquipmentSubsystem::FindSlotDef(UWeaponDataAsset* Weap
 	for (const FWeaponModSlotDef& Def : Weapon->ModSlots)
 	{
 		if (Def.SocketName == SlotSocketName)
+		{
 			return &Def;
+		}
 	}
 	return nullptr;
+}
+
+int32 UEquipmentSubsystem::CountEquippedParts(int32 PartyIndex) const
+{
+	if (!IsValidParty(PartyIndex)) return 0;
+
+	int32 Count = 0;
+	for (const auto& Pair : PartyWeapons[PartyIndex].EquippedParts)
+	{
+		if (Pair.Value)
+		{
+			++Count;
+		}
+	}
+	return Count;
 }
 
 bool UEquipmentSubsystem::EquipWeapon(int32 PartyIndex, UWeaponDataAsset* NewWeapon)
 {
 	if (!IsValidParty(PartyIndex) || !NewWeapon) return false;
 
+	FUnitWeaponState& State = PartyWeapons[PartyIndex];
+	if (State.Weapon == NewWeapon)
+	{
+		return true;
+	}
+
 	UInventorySubsystem* Inv = GetInv();
 	if (!Inv) return false;
 
-	// 기존 장착 파츠 전부 반환
-	for (auto& KVP : PartyWeapons[PartyIndex].EquippedParts)
+	const int32 PartsToReturn = CountEquippedParts(PartyIndex);
+	if (PartsToReturn > 0 && Inv->GetFreeSlotCount() < PartsToReturn)
+	{
+		return false;
+	}
+
+	for (auto& KVP : State.EquippedParts)
 	{
 		if (KVP.Value)
 		{
-			Inv->AddItem(KVP.Value, 1);
+			if (Inv->AddItem(KVP.Value, 1) != 1)
+			{
+				return false;
+			}
 		}
 	}
-	PartyWeapons[PartyIndex].EquippedParts.Empty();
+	State.EquippedParts.Empty();
 
-	PartyWeapons[PartyIndex].Weapon = NewWeapon;
+	State.Weapon = NewWeapon;
 	OnEquipmentChanged.Broadcast(PartyIndex);
 	return true;
 }
@@ -83,27 +114,30 @@ bool UEquipmentSubsystem::EquipWeaponPart(int32 PartyIndex, FName SlotSocketName
 	const FWeaponModSlotDef* SlotDef = FindSlotDef(Weapon, SlotSocketName);
 	if (!SlotDef) return false;
 
-	// 호환 검사: SlotType
 	if (NewPart->SlotType != SlotDef->SlotType) return false;
 
-	// 소켓 제한(명시된 파츠만)
 	if (NewPart->AttachmentSocketName != NAME_None && NewPart->AttachmentSocketName != SlotDef->SocketName)
 	{
 		return false;
 	}
 
-	// 인벤에 없으면 장착 불가
-	if (Inv->GetQuantity(NewPart) <= 0) return false;
-
-	// 기존 장착품
 	UWeaponPartDataAsset* Old = GetEquippedPart(PartyIndex, SlotDef->SocketName);
-	if (Old == NewPart) return true;
+	if (Old == NewPart)
+	{
+		return true;
+	}
 
-	// 새 파츠 소비
+	if (Inv->GetQuantity(NewPart) <= 0) return false;
 	if (!Inv->RemoveItem(NewPart, 1)) return false;
 
-	// 기존 파츠 반환
-	if (Old) Inv->AddItem(Old, 1);
+	if (Old)
+	{
+		if (Inv->AddItem(Old, 1) != 1)
+		{
+			Inv->AddItem(NewPart, 1);
+			return false;
+		}
+	}
 
 	PartyWeapons[PartyIndex].EquippedParts.FindOrAdd(SlotDef->SocketName) = NewPart;
 	OnEquipmentChanged.Broadcast(PartyIndex);
@@ -120,7 +154,16 @@ bool UEquipmentSubsystem::UnequipWeaponPart(int32 PartyIndex, FName SlotSocketNa
 	UWeaponPartDataAsset* Old = GetEquippedPart(PartyIndex, SlotSocketName);
 	if (!Old) return false;
 
-	Inv->AddItem(Old, 1);
+	if (Inv->GetFreeSlotCount() < 1)
+	{
+		return false;
+	}
+
+	if (Inv->AddItem(Old, 1) != 1)
+	{
+		return false;
+	}
+
 	PartyWeapons[PartyIndex].EquippedParts.Remove(SlotSocketName);
 
 	OnEquipmentChanged.Broadcast(PartyIndex);

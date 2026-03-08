@@ -1,10 +1,12 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "UObject/SoftObjectPtr.h"
 #include "GameFramework/Actor.h"
 #include "WorldCameraZoneTrigger.generated.h"
 
 class UBoxComponent;
+class UWorld;
 class AWorldCCTVCameraDirector;
 
 /**
@@ -33,7 +35,7 @@ protected:
 	UPROPERTY(EditInstanceOnly, BlueprintReadOnly, Category="Camera")
 	FTransform CameraAnchor;
 
-	/** Blend time when switching to this zone. */
+	/** Blend time when switching to this zone when no fade transition is used. */
 	UPROPERTY(EditInstanceOnly, BlueprintReadOnly, Category="Camera", meta=(ClampMin="0.0"))
 	float BlendTime = 0.75f;
 
@@ -52,6 +54,36 @@ protected:
 	UPROPERTY(EditInstanceOnly, BlueprintReadOnly, Category="Camera")
 	bool bIgnoreEndOverlap = true;
 
+	/** If true, use fade-out -> stream -> fade-in flow when entering this zone. */
+	UPROPERTY(EditInstanceOnly, BlueprintReadOnly, Category="Transition")
+	bool bUseFadeTransition = true;
+
+	UPROPERTY(EditInstanceOnly, BlueprintReadOnly, Category="Transition", meta=(EditCondition="bUseFadeTransition", ClampMin="0.0"))
+	float FadeOutDuration = 0.25f;
+
+	UPROPERTY(EditInstanceOnly, BlueprintReadOnly, Category="Transition", meta=(EditCondition="bUseFadeTransition", ClampMin="0.0"))
+	float FadeInDuration = 0.25f;
+
+	/** Player movement/look input is blocked during transition. */
+	UPROPERTY(EditInstanceOnly, BlueprintReadOnly, Category="Transition")
+	bool bFreezePlayerDuringTransition = true;
+
+	/** Block while streaming levels while screen is black. */
+	UPROPERTY(EditInstanceOnly, BlueprintReadOnly, Category="Streaming")
+	bool bBlockOnLevelStreaming = true;
+
+	/** Sublevels to make visible/loaded for this view. */
+	UPROPERTY(EditInstanceOnly, BlueprintReadOnly, Category="Streaming")
+	TArray<TSoftObjectPtr<UWorld>> LevelsToLoad;
+
+	/** Sublevels to hide/unload when entering this view. */
+	UPROPERTY(EditInstanceOnly, BlueprintReadOnly, Category="Streaming")
+	TArray<TSoftObjectPtr<UWorld>> LevelsToUnload;
+
+	/** Optional convenience for initial state: if player starts already inside, apply this zone on BeginPlay. */
+	UPROPERTY(EditInstanceOnly, BlueprintReadOnly, Category="Trigger")
+	bool bApplyIfPlayerStartsInside = false;
+
 	UFUNCTION()
 	void OnTriggerBeginOverlap(UPrimitiveComponent* OverlappedComp, AActor* OtherActor,
 		UPrimitiveComponent* OtherComp, int32 OtherBodyIndex, bool bFromSweep, const FHitResult& SweepResult);
@@ -63,4 +95,5 @@ protected:
 private:
 	bool IsPlayerActor(AActor* Actor) const;
 	void EnsureDirector();
+	void ApplyZoneToPlayer(AActor* PlayerActor);
 };

@@ -42,7 +42,4 @@ public:
 	UPROPERTY(EditInstanceOnly, Category="Encounter")
 	bool bSkipSpawnIfDefeated = false;
 	
-private:
-	UPROPERTY(Transient)
-	TObjectPtr<AWorldEnemyUnit> SpawnedEnemy = nullptr;
 };

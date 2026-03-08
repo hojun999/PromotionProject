@@ -1,10 +1,56 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "UObject/SoftObjectPtr.h"
 #include "GameFramework/Actor.h"
 #include "WorldCCTVCameraDirector.generated.h"
 
 class UCameraComponent;
+class UWorld;
+
+USTRUCT(BlueprintType)
+struct FWorldCameraZoneTransitionRequest
+{
+	GENERATED_BODY()
+
+	/** Camera anchor to move/snap to for this zone. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Camera")
+	FTransform CameraAnchor = FTransform::Identity;
+
+	/** Used only when not doing fade-based snap transitions. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Camera", meta=(ClampMin="0.0"))
+	float AnchorBlendTime = 0.75f;
+
+	/** Higher priority wins when overlapping zones try to request at the same time. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Camera")
+	int32 Priority = 0;
+
+	/** Sublevels to activate when entering this zone. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Streaming")
+	TArray<TSoftObjectPtr<UWorld>> LevelsToLoad;
+
+	/** Sublevels to deactivate when entering this zone. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Streaming")
+	TArray<TSoftObjectPtr<UWorld>> LevelsToUnload;
+
+	/** If true, do fade-out -> stream -> fade-in. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Transition")
+	bool bUseFadeTransition = true;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Transition", meta=(EditCondition="bUseFadeTransition", ClampMin="0.0"))
+	float FadeOutDuration = 0.25f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Transition", meta=(EditCondition="bUseFadeTransition", ClampMin="0.0"))
+	float FadeInDuration = 0.25f;
+
+	/** If true, movement/look input is blocked during the transition and movement is stopped immediately. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Transition")
+	bool bFreezePlayerDuringTransition = true;
+
+	/** Uses blocking level streaming while screen is black. Safer for fixed-view swaps. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Streaming")
+	bool bBlockOnLevelStreaming = true;
+};
 
 /**
  * Fixed-position CCTV-style world camera:
@@ -40,9 +86,16 @@ public:
 	UFUNCTION(BlueprintCallable, Category="World Camera")
 	void SetRotationInterpSpeed(float NewSpeed);
 
+	/** Zone-triggered view transition with optional fade and streaming. */
+	UFUNCTION(BlueprintCallable, Category="World Camera")
+	void RequestZoneTransition(const FWorldCameraZoneTransitionRequest& Request, AActor* NewTarget = nullptr);
+
 	/** Read-only: current selected zone priority (prevents flicker when multiple triggers overlap). */
 	UFUNCTION(BlueprintPure, Category="World Camera")
 	int32 GetCurrentPriority() const { return CurrentPriority; }
+
+	UFUNCTION(BlueprintPure, Category="World Camera")
+	bool IsZoneTransitionInProgress() const { return bZoneTransitionInProgress; }
 
 protected:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Components")
@@ -93,6 +146,32 @@ private:
 	// Priority-based zone selection (avoid flicker)
 	int32 CurrentPriority = 0;
 
+	// Zone transition orchestration
+	bool bZoneTransitionInProgress = false;
+	FWorldCameraZoneTransitionRequest PendingZoneRequest;
+	TWeakObjectPtr<AActor> PendingTargetActor;
+	TArray<FName> PendingLevelLoadNames;
+	TArray<FName> PendingLevelUnloadNames;
+	bool bStreamingUnloadPhase = true;
+	int32 PendingStreamingIndex = 0;
+	int32 NextLatentUUID = 1000;
+	FTimerHandle TimerHandle_FadeOutFinished;
+
 	FRotator ComputeDesiredRotation() const;
 	void UpdateAnchorTransition(float DeltaSeconds);
+
+	APlayerController* ResolvePlayerController() const;
+	void SetTransitionInputBlocked(bool bBlocked);
+	void StopTrackedPawnMovement();
+	void BeginPendingLevelStreaming();
+	void ProcessNextStreamingAction();
+	void FinishZoneTransition();
+	void ClearPendingStreamingState();
+	static FName ResolveStreamLevelName(const TSoftObjectPtr<UWorld>& LevelAsset);
+
+	UFUNCTION()
+	void HandleFadeOutFinished();
+
+	UFUNCTION()
+	void HandleStreamingStepFinished();
 };

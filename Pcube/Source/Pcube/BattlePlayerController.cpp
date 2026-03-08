@@ -46,6 +46,11 @@ void ABattlePlayerController::BindBattleDelegates()
 		return;
 	}
 	
+	BattleSub->OnTurnUnitChanged.RemoveDynamic(this, &ABattlePlayerController::HandleTurnUnitChanged);
+	BattleSub->OnTargetChanged.RemoveDynamic(this, &ABattlePlayerController::HandleTargetChanged);
+	BattleSub->OnBattleStateChanged.RemoveDynamic(this, &ABattlePlayerController::HandleBattleStateChanged);
+	BattleSub->OnBattleFinished.RemoveDynamic(this, &ABattlePlayerController::HandleBattleFinished);
+
 	BattleSub->OnTurnUnitChanged.AddDynamic(this, &ABattlePlayerController::HandleTurnUnitChanged);
 	BattleSub->OnTargetChanged.AddDynamic(this, &ABattlePlayerController::HandleTargetChanged);
 	BattleSub->OnBattleStateChanged.AddDynamic(this, &ABattlePlayerController::HandleBattleStateChanged);
@@ -54,6 +59,8 @@ void ABattlePlayerController::BindBattleDelegates()
 
 void ABattlePlayerController::UnbindBattleDelegates()
 {
+	if (!BattleSub) return;
+
 	BattleSub->OnTurnUnitChanged.RemoveDynamic(this, &ABattlePlayerController::HandleTurnUnitChanged);
 	BattleSub->OnTargetChanged.RemoveDynamic(this, &ABattlePlayerController::HandleTargetChanged);
 	BattleSub->OnBattleStateChanged.RemoveDynamic(this, &ABattlePlayerController::HandleBattleStateChanged);
@@ -104,15 +111,9 @@ void ABattlePlayerController::HandleActionRequested(USkillDataAsset* SkillData)
 	if (!BattleSub) BattleSub = GetWorld() ? GetWorld()->GetSubsystem<UBattleControlSubsystem>() : nullptr;
 	if (!BattleSub || !SkillData) return;
 	
-	// 1. 메뉴 숨기기
 	if (BattleHUD) BattleHUD->HideActionMenu();
-	
-	// 2. 타겟 선택 전환
-	// 마우스로 적 클릭하여 선택
-	ApplyInputMode_GameOnly(true);
-	
-	// 3. 전투 호출
-	BattleSub->StartTargetSelection(SkillData);
+
+	BattleSub->RequestUseSkill(SkillData);
 }
 
 void ABattlePlayerController::HandleSkillRequested(USkillDataAsset* Skill)
@@ -259,13 +260,13 @@ void ABattlePlayerController::HandleTurnUnitChanged(ABattleBaseUnit* ActiveUnit)
 
 void ABattlePlayerController::HandleTargetChanged(AActor* NewTarget)
 {
-	if (!IsValid(NewTarget)) return;
+	if (!IsValid(NewTarget))
+	{
+		FocusDefaultBattleCamera(0.3f);
+		return;
+	}
 	
 	FocusViewTarget(NewTarget, 0.4f);
-	
-	// HUD의 타겟 UI/아웃라인 요청은 여기서 호출해도 됨
-	// if (BattleHUD) BattleHUD->NotifyTargetChanged(NewTarget);
-	
 }
 
 void ABattlePlayerController::HandleBattleStateChanged(EBattleState NewState)
@@ -315,10 +316,6 @@ void ABattlePlayerController::HandleBattleFinished(EBattleResult Result)
 		}
 		
 		UE_LOG(LogTemp, Error, TEXT("[Battle] Defeat -> GameOver -> Open MainMenu Level"));
-		if (BattleHUD) BattleHUD->ShowGameOverUI();
-		
-		// TODO: 메인메뉴 OpenLevel
-		
 		return;
 	}
 	

@@ -126,7 +126,6 @@ void UAllyStatusEntryWidget::RebuildSkillPointsIcons(int32 Max)
 		Img->SetColorAndOpacity(SkillPointEmptyColor); // 기본은 비어있는 색
 		if (UHorizontalBoxSlot* HBoxSlot  = HB_SkillPoints->AddChildToHorizontalBox(Img))
 		{
-			//Slot->SetPadding(SkillPointPadding); // 아이콘 간격
 			HBoxSlot->SetVerticalAlignment(VAlign_Center);
 		}
 		
