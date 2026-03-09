@@ -25,6 +25,7 @@ public:
 	
 	void ToggleInventory();
 	void HideInventory();
+	
 	void TogglePlayerInfo();
 	void HidePlayerInfo();
 	

@@ -15,16 +15,14 @@ class UEquipmentSubsystem;
 class UBattleInfoTransferSubsystem;
 class UUnitDataAsset;
 class UPlayerInfoEquipButtonWidget;
+class UEquipPartsWindowWidget;
+struct FPlayerInfoEquipmentButtonDef;
 
 /**
  * PlayerInfoWindow (World UI)
  * - 파티원이 2명인 전제에 맞춰: 초상화 버튼(Btn_Ally0/1)로 선택
  * - 3D 프리뷰 대신 이미지(Img_Illustration)로 표시
  * - 스탯 + 무기부품 합산 효과(Proj/Hit/DmgMul 등) 표시
- *
- * NOTE:
- * - 무기/방어구는 인벤 아이템이 아니고, "부품"만 인벤/드랍 대상.
- * - 무기 슬롯/모딩창은 별도 위젯으로 띄우는 구조를 권장.
  */
 UCLASS()
 class PCUBE_API UPlayerInfoWindowWidget : public UUserWidget
@@ -42,47 +40,39 @@ protected:
 	virtual void NativeConstruct() override;
 	virtual void NativeDestruct() override;
 
-	// Blueprint에서 모딩창을 띄우고 싶으면 여기 이벤트를 구현해서 사용
 	UFUNCTION(BlueprintImplementableEvent, Category="PlayerInfo")
 	void BP_OpenWeaponModWindow(int32 PartyIndex);
 
 	UFUNCTION(BlueprintImplementableEvent, Category="PlayerInfo")
 	void BP_OpenArmorModWindow(int32 PartyIndex);
 
-	// (추천) 장비 버튼 클릭 시 "부품 교환/장착" 창을 띄우는 단일 진입점
-	// EquipmentKey는 UnitDataAsset.PlayerInfoEquipButtons의 EquipmentKey 값
+	// C++ 기본 구현이 실패했을 때 BP 커스텀 처리용 fallback
 	UFUNCTION(BlueprintImplementableEvent, Category="PlayerInfo")
 	void BP_OpenEquipmentPartsSelectionWindow(int32 PartyIndex, FName EquipmentKey);
-	
+
 private:
-	// --- UI 이벤트 ---
 	UFUNCTION() void HandleAlly0Clicked();
 	UFUNCTION() void HandleAlly1Clicked();
-
-	// 빨간 박스(무기/방어구) 버튼이 추가될 경우 사용
 	UFUNCTION() void HandleWeaponSlotClicked();
 	UFUNCTION() void HandleArmorSlotClicked();
-
-	// --- Subsystem 이벤트 ---
 	UFUNCTION() void HandleEquipmentChanged(int32 PartyIndex);
+	UFUNCTION() void HandleEquipmentButtonClicked(FName EquipmentKey);
 
-private:
 	void SelectPartyMember(int32 PartyIndex);
 	void RefreshPortraitButtons();
 	void RefreshSelectedMemberPanel();
 	void RefreshStatsPanel();
+	void RebuildEquipmentButtons();
+	void EnsureDefaultWeaponsInitialized();
+	void HideEquipPartsWindow();
+	bool TryToggleEquipmentPartsWindow(FName EquipmentKey);
+	bool ResolveEquipmentButtonDef(FName EquipmentKey, FPlayerInfoEquipmentButtonDef& OutDef) const;
+	FVector2D GetEquipButtonWindowPosition(FName EquipmentKey) const;
 
 	int32 GetPartyCount() const;
 	UUnitDataAsset* GetPartyUnitData(int32 PartyIndex) const;
 
-	// --- 동적 장비 버튼(빨간 박스 영역) ---
-	UFUNCTION()
-	void HandleEquipmentButtonClicked(FName EquipmentKey);
-
-	void RebuildEquipmentButtons();
-
 private:
-	// --- Portrait Buttons (HB_Portraits) ---
 	UPROPERTY(meta=(BindWidget))
 	UButton* Btn_Ally0 = nullptr;
 
@@ -95,16 +85,12 @@ private:
 	UPROPERTY(meta=(BindWidgetOptional))
 	UImage* Img_Portrait1 = nullptr;
 
-	// --- 중앙 일러스트(3D 대신 이미지) ---
 	UPROPERTY(meta=(BindWidgetOptional))
 	UImage* Img_Illustration = nullptr;
 
-	// --- 장비 버튼을 동적으로 배치할 캔버스 ---
-	// WBP_PlayerInfoWindowWidget에 CanvasPanel을 추가하고 이름을 Canvas_EquipButtons로 맞추면 자동 바인딩됨
 	UPROPERTY(meta=(BindWidgetOptional))
 	UCanvasPanel* Canvas_EquipButtons = nullptr;
 
-	// --- 스탯/효과 표시 (VB_StatTexts 내부) ---
 	UPROPERTY(meta=(BindWidgetOptional)) UTextBlock* Text_HP = nullptr;
 	UPROPERTY(meta=(BindWidgetOptional)) UTextBlock* Text_SP = nullptr;
 	UPROPERTY(meta=(BindWidgetOptional)) UTextBlock* Text_ATK = nullptr;
@@ -114,20 +100,22 @@ private:
 	UPROPERTY(meta=(BindWidgetOptional)) UTextBlock* Text_Hit = nullptr;
 	UPROPERTY(meta=(BindWidgetOptional)) UTextBlock* Text_DmgMul = nullptr;
 
-	// --- (선택) 빨간 박스에 추가할 버튼/아이콘 ---
-	// WBP에 실제로 추가했을 때만 BindWidgetOptional로 연결됨
 	UPROPERTY(meta=(BindWidgetOptional)) UButton* Btn_WeaponSlot = nullptr;
 	UPROPERTY(meta=(BindWidgetOptional)) UButton* Btn_ArmorSlot = nullptr;
 	UPROPERTY(meta=(BindWidgetOptional)) UImage* Img_WeaponIcon = nullptr;
 	UPROPERTY(meta=(BindWidgetOptional)) UImage* Img_ArmorIcon = nullptr;
 
-	// 동적 장비 버튼 위젯 클래스
 	UPROPERTY(EditAnywhere, Category="PlayerInfo|UI")
 	TSubclassOf<UPlayerInfoEquipButtonWidget> EquipButtonWidgetClass;
+
+	UPROPERTY(EditAnywhere, Category="PlayerInfo|UI")
+	TSubclassOf<UEquipPartsWindowWidget> EquipPartsWindowClass;
 
 private:
 	UPROPERTY() TObjectPtr<UEquipmentSubsystem> EquipmentSubsystem = nullptr;
 	UPROPERTY() TObjectPtr<UBattleInfoTransferSubsystem> TransferSubsystem = nullptr;
+	UPROPERTY() TObjectPtr<UEquipPartsWindowWidget> EquipPartsWindow = nullptr;
+	UPROPERTY() TMap<FName, TObjectPtr<UPlayerInfoEquipButtonWidget>> EquipButtonsByKey;
 
 	int32 SelectedPartyIndex = 0;
 };

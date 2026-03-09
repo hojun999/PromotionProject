@@ -37,53 +37,52 @@ const FWeaponModSlotDef* UEquipmentSubsystem::FindSlotDef(UWeaponDataAsset* Weap
 	return nullptr;
 }
 
-int32 UEquipmentSubsystem::CountEquippedParts(int32 PartyIndex) const
+bool UEquipmentSubsystem::IsPartCompatibleWithWeapon(UWeaponDataAsset* Weapon, FName SlotSocketName, const UWeaponPartDataAsset* Part) const
 {
-	if (!IsValidParty(PartyIndex)) return 0;
+	if (!Weapon || !Part || SlotSocketName == NAME_None) return false;
 
-	int32 Count = 0;
-	for (const auto& Pair : PartyWeapons[PartyIndex].EquippedParts)
+	const FWeaponModSlotDef* SlotDef = FindSlotDef(Weapon, SlotSocketName);
+	if (!SlotDef) return false;
+
+	if (Part->SlotType != SlotDef->SlotType) return false;
+
+	if (Part->AttachmentSocketName != NAME_None && Part->AttachmentSocketName != SlotDef->SocketName)
 	{
-		if (Pair.Value)
-		{
-			++Count;
-		}
+		return false;
 	}
-	return Count;
+
+	return true;
+}
+
+bool UEquipmentSubsystem::CanEquipWeaponPart(int32 PartyIndex, FName SlotSocketName, UWeaponPartDataAsset* Part) const
+{
+	if (!IsValidParty(PartyIndex) || !Part) return false;
+	return IsPartCompatibleWithWeapon(PartyWeapons[PartyIndex].Weapon, SlotSocketName, Part);
 }
 
 bool UEquipmentSubsystem::EquipWeapon(int32 PartyIndex, UWeaponDataAsset* NewWeapon)
 {
 	if (!IsValidParty(PartyIndex) || !NewWeapon) return false;
 
-	FUnitWeaponState& State = PartyWeapons[PartyIndex];
-	if (State.Weapon == NewWeapon)
+	UInventorySubsystem* Inv = GetInv();
+	if (!Inv) return false;
+
+	if (PartyWeapons[PartyIndex].Weapon == NewWeapon)
 	{
 		return true;
 	}
 
-	UInventorySubsystem* Inv = GetInv();
-	if (!Inv) return false;
-
-	const int32 PartsToReturn = CountEquippedParts(PartyIndex);
-	if (PartsToReturn > 0 && Inv->GetFreeSlotCount() < PartsToReturn)
-	{
-		return false;
-	}
-
-	for (auto& KVP : State.EquippedParts)
+	// 기존 장착 파츠 전부 반환
+	for (auto& KVP : PartyWeapons[PartyIndex].EquippedParts)
 	{
 		if (KVP.Value)
 		{
-			if (Inv->AddItem(KVP.Value, 1) != 1)
-			{
-				return false;
-			}
+			Inv->AddItem(KVP.Value, 1);
 		}
 	}
-	State.EquippedParts.Empty();
+	PartyWeapons[PartyIndex].EquippedParts.Empty();
 
-	State.Weapon = NewWeapon;
+	PartyWeapons[PartyIndex].Weapon = NewWeapon;
 	OnEquipmentChanged.Broadcast(PartyIndex);
 	return true;
 }
@@ -111,35 +110,24 @@ bool UEquipmentSubsystem::EquipWeaponPart(int32 PartyIndex, FName SlotSocketName
 	if (!Inv) return false;
 
 	UWeaponDataAsset* Weapon = PartyWeapons[PartyIndex].Weapon;
-	const FWeaponModSlotDef* SlotDef = FindSlotDef(Weapon, SlotSocketName);
-	if (!SlotDef) return false;
+	if (!IsPartCompatibleWithWeapon(Weapon, SlotSocketName, NewPart)) return false;
 
-	if (NewPart->SlotType != SlotDef->SlotType) return false;
+	UWeaponPartDataAsset* Old = GetEquippedPart(PartyIndex, SlotSocketName);
+	if (Old == NewPart) return true;
 
-	if (NewPart->AttachmentSocketName != NAME_None && NewPart->AttachmentSocketName != SlotDef->SocketName)
-	{
-		return false;
-	}
-
-	UWeaponPartDataAsset* Old = GetEquippedPart(PartyIndex, SlotDef->SocketName);
-	if (Old == NewPart)
-	{
-		return true;
-	}
-
+	// 인벤에 없으면 장착 불가
 	if (Inv->GetQuantity(NewPart) <= 0) return false;
+
+	// 새 파츠 소비
 	if (!Inv->RemoveItem(NewPart, 1)) return false;
 
+	// 기존 파츠 반환
 	if (Old)
 	{
-		if (Inv->AddItem(Old, 1) != 1)
-		{
-			Inv->AddItem(NewPart, 1);
-			return false;
-		}
+		Inv->AddItem(Old, 1);
 	}
 
-	PartyWeapons[PartyIndex].EquippedParts.FindOrAdd(SlotDef->SocketName) = NewPart;
+	PartyWeapons[PartyIndex].EquippedParts.FindOrAdd(SlotSocketName) = NewPart;
 	OnEquipmentChanged.Broadcast(PartyIndex);
 	return true;
 }
@@ -154,16 +142,7 @@ bool UEquipmentSubsystem::UnequipWeaponPart(int32 PartyIndex, FName SlotSocketNa
 	UWeaponPartDataAsset* Old = GetEquippedPart(PartyIndex, SlotSocketName);
 	if (!Old) return false;
 
-	if (Inv->GetFreeSlotCount() < 1)
-	{
-		return false;
-	}
-
-	if (Inv->AddItem(Old, 1) != 1)
-	{
-		return false;
-	}
-
+	Inv->AddItem(Old, 1);
 	PartyWeapons[PartyIndex].EquippedParts.Remove(SlotSocketName);
 
 	OnEquipmentChanged.Broadcast(PartyIndex);

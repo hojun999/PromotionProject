@@ -104,16 +104,20 @@ void AWorldHUD::ToggleInventory()
 	if (!InventoryWindow) return;
 
 	const bool bOpen = (InventoryWindow->GetVisibility() != ESlateVisibility::Visible);
+	HideAllPanels();
+	
 	if (bOpen)
 	{
-		HideAllPanels();
-		InventoryWindow->Open();
+		//HideAllPanels();
+		InventoryWindow->SetVisibility(ESlateVisibility::Visible);
 		ApplyInputMode_GameAndUI(InventoryWindow);
 		SetWorldInputBlocked(true);
 	}
 	else
 	{
-		HideInventory();
+		InventoryWindow->SetVisibility((ESlateVisibility::Collapsed));
+		ApplyInputMode_GameOnly();
+		SetWorldInputBlocked(false);
 	}
 }
 
@@ -132,16 +136,33 @@ void AWorldHUD::TogglePlayerInfo()
 	if (!PlayerInfoWindow) return;
 
 	const bool bOpen = (PlayerInfoWindow->GetVisibility() != ESlateVisibility::Visible);
+	HideAllPanels();
+	
 	if (bOpen)
 	{
-		HideAllPanels();
-		PlayerInfoWindow->Open();
+		if (UPlayerInfoWindowWidget* PIW = Cast<UPlayerInfoWindowWidget>(PlayerInfoWindow))
+		{
+			PIW->Open();
+		}
+		else
+		{
+			PlayerInfoWindow->SetVisibility(ESlateVisibility::Visible);
+		}
 		ApplyInputMode_GameAndUI(PlayerInfoWindow);
 		SetWorldInputBlocked(true);
 	}
 	else
 	{
-		HidePlayerInfo();
+		if (UPlayerInfoWindowWidget* PIW = Cast<UPlayerInfoWindowWidget>(PlayerInfoWindow))
+		{
+			PIW->Close();
+		}
+		else
+		{
+			PlayerInfoWindow->SetVisibility(ESlateVisibility::Collapsed);
+		}
+		ApplyInputMode_GameOnly();
+		SetWorldInputBlocked(false);
 	}
 }
 
@@ -165,13 +186,24 @@ bool AWorldHUD::CloseAnyOpenPanel()
 	
 	if (InventoryWindow && InventoryWindow->GetVisibility() == ESlateVisibility::Visible)
 	{
-		HideInventory();
+		InventoryWindow->SetVisibility(ESlateVisibility::Collapsed);
+		ApplyInputMode_GameOnly();
+		SetWorldInputBlocked(false);
 		return true;
 	}
 	
 	if (PlayerInfoWindow && PlayerInfoWindow->GetVisibility() == ESlateVisibility::Visible)
 	{
-		HidePlayerInfo();
+		if (UPlayerInfoWindowWidget* PIW = Cast<UPlayerInfoWindowWidget>(PlayerInfoWindow))
+		{
+			PIW->Close();
+		}
+		else
+		{
+			PlayerInfoWindow->SetVisibility(ESlateVisibility::Collapsed);
+		}
+		ApplyInputMode_GameOnly();
+		SetWorldInputBlocked(false);
 		return true;
 	}
 	return false;

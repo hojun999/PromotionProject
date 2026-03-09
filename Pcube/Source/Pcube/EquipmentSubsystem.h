@@ -37,6 +37,7 @@ public:
 	UFUNCTION(BlueprintCallable)
 	void EnsurePartySize(int32 NumPartyMembers);
 
+	// 무기 교체(기존 파츠는 인벤으로 반환 후 초기화하는 단순 정책)
 	UFUNCTION(BlueprintCallable)
 	bool EquipWeapon(int32 PartyIndex, UWeaponDataAsset* NewWeapon);
 
@@ -47,11 +48,17 @@ public:
 	UWeaponPartDataAsset* GetEquippedPart(int32 PartyIndex, FName SlotSocketName) const;
 
 	UFUNCTION(BlueprintCallable)
+	bool CanEquipWeaponPart(int32 PartyIndex, FName SlotSocketName, UWeaponPartDataAsset* Part) const;
+
+	bool IsPartCompatibleWithWeapon(UWeaponDataAsset* Weapon, FName SlotSocketName, const UWeaponPartDataAsset* Part) const;
+
+	UFUNCTION(BlueprintCallable)
 	bool EquipWeaponPart(int32 PartyIndex, FName SlotSocketName, UWeaponPartDataAsset* NewPart);
 
 	UFUNCTION(BlueprintCallable)
 	bool UnequipWeaponPart(int32 PartyIndex, FName SlotSocketName);
 
+	// 합산 효과(전투/스탯 패널용)
 	UFUNCTION(BlueprintCallable)
 	FWeaponPartEffect GetTotalWeaponPartEffect(int32 PartyIndex) const;
 
@@ -62,5 +69,4 @@ private:
 	UInventorySubsystem* GetInv() const;
 	bool IsValidParty(int32 PartyIndex) const;
 	const FWeaponModSlotDef* FindSlotDef(UWeaponDataAsset* Weapon, FName SlotSocketName) const;
-	int32 CountEquippedParts(int32 PartyIndex) const;
 };
