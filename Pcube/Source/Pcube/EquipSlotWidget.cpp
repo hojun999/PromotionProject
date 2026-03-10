@@ -23,19 +23,15 @@ void UEquipSlotWidget::NativeConstruct()
 	}
 }
 
-void UEquipSlotWidget::InitSlot(FName InSlotSocketName, FText InDisplayName)
+void UEquipSlotWidget::InitSlot(FName InPartSlotKey, FText InDisplayName)
 {
-	SlotSocketName = InSlotSocketName;
+	PartSlotKey = InPartSlotKey;
 
 	if (Text_SlotName)
 	{
-		Text_SlotName->SetText(InDisplayName.IsEmpty() ? FText::FromName(SlotSocketName) : InDisplayName);
+		Text_SlotName->SetText(InDisplayName.IsEmpty() ? FText::FromName(PartSlotKey) : InDisplayName);
 	}
-
-	// if (Text_Slot)
-	// {
-	// 	Text_Slot->SetText(FText::FromName(SlotSocketName));
-	// }
+	
 	SetEquipped(nullptr);
 }
 
@@ -74,10 +70,10 @@ void UEquipSlotWidget::SetEquipped(UWeaponPartDataAsset* Part)
 
 void UEquipSlotWidget::HandleSelectClicked()
 {
-	OnSelected.Broadcast(SlotSocketName);
+	OnSelected.Broadcast(PartSlotKey);
 }
 
 void UEquipSlotWidget::HandleUnequipClicked()
 {
-	OnUnequip.Broadcast(SlotSocketName);
+	OnUnequip.Broadcast(PartSlotKey);
 }

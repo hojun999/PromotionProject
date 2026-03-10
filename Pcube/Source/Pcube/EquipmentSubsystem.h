@@ -27,7 +27,7 @@ struct FUnitEquipmentState
 	UPROPERTY()
 	TObjectPtr<UArmorDataAsset> Armor = nullptr;
 
-	// PartSlotKey(SlotId) -> Equipped Part
+	// 현재는 부품 슬롯 키(SlotId) -> 장착 파츠로 저장
 	UPROPERTY()
 	TMap<FName, TObjectPtr<UWeaponPartDataAsset>> EquippedParts;
 };
@@ -58,21 +58,23 @@ public:
 	UFUNCTION(BlueprintCallable)
 	UArmorDataAsset* GetEquippedArmor(int32 PartyIndex) const;
 	
-	// PartSlotKey는 WeaponDataAsset/ArmorDataAsset의 ModSlots[].SlotId를 사용
 	UFUNCTION(BlueprintCallable)
-	UWeaponPartDataAsset* GetEquippedPart(int32 PartyIndex, FName PartSlotKey) const;
+	UWeaponPartDataAsset* GetEquippedPart(int32 PartyIndex, FName PartSlotKeyOrSocketName) const;
 
 	UFUNCTION(BlueprintCallable)
-	bool CanEquipWeaponPart(int32 PartyIndex, FName PartSlotKey, UWeaponPartDataAsset* NewPart) const;
+	bool CanEquipWeaponPart(int32 PartyIndex, FName PartSlotKeyOrSocketName, UWeaponPartDataAsset* NewPart) const;
 
 	UFUNCTION(BlueprintCallable)
-	bool EquipWeaponPart(int32 PartyIndex, FName PartSlotKey, UWeaponPartDataAsset* NewPart);
+	bool EquipWeaponPart(int32 PartyIndex, FName PartSlotKeyOrSocketName, UWeaponPartDataAsset* NewPart);
 	
 	UFUNCTION(BlueprintCallable)
-	bool UnequipWeaponPart(int32 PartyIndex, FName PartSlotKey);
+	bool UnequipWeaponPart(int32 PartyIndex, FName PartSlotKeyOrSocketName);
 
 	UFUNCTION(BlueprintCallable)
 	FWeaponPartEffect GetTotalEquippedPartEffect(int32 PartyIndex) const;
+	
+	UFUNCTION(BlueprintCallable)
+	FWeaponPartEffect GetTotalWeaponPartEffect(int32 PartyIndex) const { return GetTotalEquippedPartEffect(PartyIndex); }
 	
 	// UFUNCTION(BlueprintCallable)
 	// bool IsPartCompatibleWithWeapon(UWeaponDataAsset* Weapon, FName SlotSocketName, const UWeaponPartDataAsset* Part) const;
@@ -95,4 +97,8 @@ private:
 
 	UInventorySubsystem* GetInv() const;
 	bool IsValidParty(int32 PartyIndex) const;
+	const FWeaponModSlotDef* FindWeaponSlotDef(const UWeaponDataAsset* Weapon, FName PartSlotKeyOrSocketName) const;
+	const FWeaponModSlotDef* FindArmorSlotDef(const UArmorDataAsset* Armor, FName PartSlotKeyOrSocketName) const;
+	FName ResolveStoredPartKey(int32 PartyIndex, FName PartSlotKeyOrSocketName) const;
+
 };

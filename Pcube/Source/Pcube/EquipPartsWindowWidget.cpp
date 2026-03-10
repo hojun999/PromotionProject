@@ -77,7 +77,8 @@ void UEquipPartsWindowWidget::OpenForWeapon(int32 InPartyIndex, FName InEquipmen
 	EquipmentButtonKey = InEquipmentButtonKey;
 	CurrentEquipmentKind = EPlayerInfoEquipmentKind::Weapon;
 	ActiveWeapon = InWeapon;
-	AutoSelectFirstSlotIfNeeded();
+	SelectedPartSlotKey = NAME_None;
+	//AutoSelectFirstSlotIfNeeded(); 필요한 것인지 확인
 	SetVisibility(ESlateVisibility::Visible);
 	Refresh();
 }
@@ -89,7 +90,8 @@ void UEquipPartsWindowWidget::OpenForArmor(int32 InPartyIndex, FName InEquipment
 	EquipmentButtonKey = InEquipmentButtonKey;
 	CurrentEquipmentKind = EPlayerInfoEquipmentKind::Armor;
 	ActiveArmor = InArmor;
-	AutoSelectFirstSlotIfNeeded();
+	SelectedPartSlotKey = NAME_None;
+	//AutoSelectFirstSlotIfNeeded(); 필요한 것인지 확인
 	SetVisibility(ESlateVisibility::Visible);
 	Refresh();
 }
@@ -299,8 +301,17 @@ void UEquipPartsWindowWidget::RebuildSlotCanvas()
 			CanvasSlot->SetAnchors(FAnchors(Def.UIAnchor.X, Def.UIAnchor.Y, Def.UIAnchor.X, Def.UIAnchor.Y));
 			CanvasSlot->SetAlignment(FVector2D(0.5f, 0.5f));
 			CanvasSlot->SetPosition(Def.UIPixelOffset);
-			CanvasSlot->SetSize(SlotWidgetSize);
+			const FVector2D FinalSize = (Def.UISize.X > 0.f && Def.UISize.Y > 0.f) ? Def.UISize : DefaultSlotWidgetSize;
+			CanvasSlot->SetSize(FinalSize);
 		}
+	}
+}
+
+void UEquipPartsWindowWidget::ClearCandidateGrid()
+{
+	if (Grid_Parts)
+	{
+		Grid_Parts->ClearChildren();
 	}
 }
 
@@ -311,8 +322,14 @@ void UEquipPartsWindowWidget::RebuildCandidateGrid()
 		return;
 	}
 
-	Grid_Parts->ClearChildren();
-
+	ClearCandidateGrid();
+	
+	
+	if (SelectedPartSlotKey == NAME_None)
+	{
+		return;
+	}
+	
 	if (!InventorySubsystem || !EquipmentSubsystem || !PartCandidateWidgetClass || PartyIndex == INDEX_NONE || SelectedPartSlotKey == NAME_None)
 	{
 		return;

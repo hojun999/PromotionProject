@@ -6,6 +6,10 @@
 #include "Blueprint/UserWidget.h"
 #include "EquipSlotWidget.generated.h"
 
+// ---
+// EquipSlotWidget은 장비 일러스트 위에 배치되는 부품 슬롯 버튼
+// ---
+
 class UButton;
 class UImage;
 class UTextBlock;
@@ -21,7 +25,7 @@ class PCUBE_API UEquipSlotWidget : public UUserWidget
 	GENERATED_BODY()
 	
 public:
-	void InitSlot(FName InSlotSocketName, FText InDisplayName);
+	void InitSlot(FName InPartSlotKey, FText InDisplayName);
 	void SetEquipped(UWeaponPartDataAsset* Part);
 
 	UPROPERTY(BlueprintAssignable)
@@ -54,7 +58,7 @@ private:
 	UTextBlock* Text_SlotName = nullptr;
 
 private:
-	FName SlotSocketName = NAME_None;
+	FName PartSlotKey = NAME_None;
 
 	UPROPERTY()
 	TObjectPtr<UWeaponPartDataAsset> EquippedPart = nullptr;

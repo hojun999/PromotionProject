@@ -13,7 +13,7 @@ struct FWeaponModSlotDef
 {
 	GENERATED_BODY()
 
-	// 논리 파츠 슬롯 식별자. CompatibleEquipmentKeys와 직접 매칭된다.
+	// 저장/조회/장착 판정용 고정 키. 현재는 이 값을 부품 슬롯 키로 사용
 	// 예: KnightSword_Blade, KnightSword_Grip, MageStaff_Core
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Slot")
 	FName SlotId = NAME_None;
@@ -22,7 +22,7 @@ struct FWeaponModSlotDef
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Slot")
 	EWeaponModSlotType SlotType = EWeaponModSlotType::Custom;
 
-	// 실제 메시 소켓이 필요할 때만 사용하는 시각용 데이터.
+	// 외형 소켓은 레거시/비주얼용으로만 유지
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Slot|Visual")
 	FName SocketName = NAME_None;
 
@@ -32,6 +32,9 @@ struct FWeaponModSlotDef
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Slot|UI")
 	FVector2D UIPixelOffset = FVector2D(0.f, 0.f);
 
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Slot|UI")
+	FVector2D UISize = FVector2D(56.f, 56.f);
+	
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Slot|UI")
 	FText DisplayName;
 };
@@ -69,15 +72,16 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Weapon")
 	TObjectPtr<UTexture2D> Icon = nullptr;
 
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Weapon|UI")
-	TObjectPtr<UTexture2D> IllustrationTexture = nullptr;
-
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Weapon|Stats")
 	FEquipmentStatBonus BaseStatBonus;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Weapon|Visual")
 	TObjectPtr<UStaticMesh> WeaponMesh = nullptr;
 
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Weapon|UI")
+	TObjectPtr<UTexture2D> IllustrationTexture = nullptr;
+	
+	// 일러스트 위에 직접 배치할 버튼 정의
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Weapon|Parts")
 	TArray<FWeaponModSlotDef> ModSlots;
 

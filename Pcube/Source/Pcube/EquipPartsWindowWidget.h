@@ -76,6 +76,7 @@ private:
 	
 	void RebuildSlotCanvas();
 	void RebuildCandidateGrid();
+	void ClearCandidateGrid();
 	void ResetActiveEquipment();
 	void AutoSelectFirstSlotIfNeeded();
 	const TArray<FWeaponModSlotDef>* GetActiveSlots() const;
@@ -107,7 +108,7 @@ private:
 	TSubclassOf<UEquipPartsSlotWidget> PartCandidateWidgetClass;
 	
 	UPROPERTY(EditAnywhere, Category="UI")
-	FVector2D SlotWidgetSize = FVector2D(56.f, 56.f);
+	FVector2D DefaultSlotWidgetSize = FVector2D(56.f, 56.f);
 	
 	UPROPERTY()
 	TObjectPtr<UEquipmentSubsystem> EquipmentSubsystem = nullptr;
@@ -124,7 +125,6 @@ private:
 	int32 PartyIndex = INDEX_NONE;
 	FName EquipmentButtonKey = NAME_None;
 	FName SelectedPartSlotKey = NAME_None;
-	//FName EquipmentKey = NAME_None;
 	EPlayerInfoEquipmentKind CurrentEquipmentKind = EPlayerInfoEquipmentKind::Weapon;
 	
 	static constexpr int32 Rows = 2;
