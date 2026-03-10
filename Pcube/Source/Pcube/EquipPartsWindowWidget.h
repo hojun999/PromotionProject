@@ -62,23 +62,23 @@ private:
 	UFUNCTION()
 	void HandleEquipmentChanged(int32 ChangedPartyIndex);
 
-	UFUNCTION()
-	void HandlePartSlotSelected(FName PartSlotKey);
+	// UFUNCTION()
+	// void HandlePartSlotSelected(FName PartSlotKey);
 	
 	// UFUNCTION()
 	// void HandlePartSlotSelected(UWeaponPartDataAsset* Part);
 
-	UFUNCTION()
-	void HandlePartSlotUnequip(FName PartSlotKey);
+	// UFUNCTION()
+	// void HandlePartSlotUnequip(FName PartSlotKey);
 	
 	UFUNCTION()
 	void HandlePartCandidateClicked(UWeaponPartDataAsset* Part);
 	
-	void RebuildSlotCanvas();
-	void RebuildCandidateGrid();
-	void ClearCandidateGrid();
+	//void RebuildSlotCanvas();
+	void RebuildCandidateCanvas();
+	void ClearCandidateCanvas();
 	void ResetActiveEquipment();
-	void AutoSelectFirstSlotIfNeeded();
+	//void AutoSelectFirstSlotIfNeeded();
 	const TArray<FWeaponModSlotDef>* GetActiveSlots() const;
 	UTexture2D* GetActiveIllustration() const;
 	FText GetActiveTitle() const;
@@ -89,11 +89,10 @@ private:
 	UPROPERTY(meta=(BindWidget))
 	UImage* Img_EquipmentIllustration = nullptr;
 
-	UPROPERTY(meta=(BindWidgetOptional))
-	UCanvasPanel* Canvas_Slots = nullptr;
 	
-	UPROPERTY(meta=(BindWidget))
-	UUniformGridPanel* Grid_Parts = nullptr;
+	
+	UPROPERTY(meta=(BindWidgetOptional))
+	UCanvasPanel* Canvas_Parts = nullptr;
 
 	UPROPERTY(meta=(BindWidgetOptional))
 	UButton* Btn_Close = nullptr;
@@ -101,8 +100,8 @@ private:
 	UPROPERTY(meta=(BindWidgetOptional))
 	UTextBlock* Text_Title = nullptr;
 
-	UPROPERTY(EditAnywhere, Category="UI")
-	TSubclassOf<UEquipSlotWidget> EquipSlotWidgetClass;
+	// UPROPERTY(EditAnywhere, Category="UI")
+	// TSubclassOf<UEquipSlotWidget> EquipSlotWidgetClass;
 	
 	UPROPERTY(EditAnywhere, Category="UI")
 	TSubclassOf<UEquipPartsSlotWidget> PartCandidateWidgetClass;
@@ -124,7 +123,7 @@ private:
 	
 	int32 PartyIndex = INDEX_NONE;
 	FName EquipmentButtonKey = NAME_None;
-	FName SelectedPartSlotKey = NAME_None;
+	//FName SelectedPartSlotKey = NAME_None;
 	EPlayerInfoEquipmentKind CurrentEquipmentKind = EPlayerInfoEquipmentKind::Weapon;
 	
 	static constexpr int32 Rows = 2;

@@ -8,6 +8,27 @@
 #include "WeaponModTypes.h"
 #include "WeaponDataAsset.generated.h"
 
+class UWeaponPartDataAsset;
+
+USTRUCT(BlueprintType)
+struct FWeaponPartSlotEntry
+{
+	GENERATED_BODY()
+	
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Part")
+	TSoftObjectPtr<UWeaponPartDataAsset> Part;
+
+	// 일러스트 위 캔버스 기준 앵커 (0~1)
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="UI", meta=(ClampMin="0.0", ClampMax="1.0"))
+	FVector2D UIAnchor = FVector2D(0.5f, 0.5f);
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="UI")
+	FVector2D UIPixelOffset = FVector2D(0.f, 0.f);
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="UI")
+	FVector2D UISize = FVector2D(56.f, 56.f);
+};
+
 USTRUCT(BlueprintType)
 struct FWeaponModSlotDef
 {
@@ -37,6 +58,12 @@ struct FWeaponModSlotDef
 	
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Slot|UI")
 	FText DisplayName;
+	
+	// 이 슬롯에 장착 가능한 파츠 후보 목록.
+	// 에디터에서 직접 지정. 인벤토리 보유 여부와 무관하게 항상 UI에 표시
+	// 인벤에 있으면 밝게(활성), 없으면 어둡게(비활성) 표시된다.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Slot|Parts")
+	TArray<FWeaponPartSlotEntry> CandidateParts;
 };
 
 USTRUCT(BlueprintType)

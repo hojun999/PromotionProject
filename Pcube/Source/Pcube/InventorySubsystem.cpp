@@ -11,6 +11,8 @@ int32 UInventorySubsystem::AddItem(UItemDataAsset* Item, int32 Amount)
 	int32 Remaining = Amount;
 	int32 AddedTotal = 0;
 	
+	UE_LOG(LogTemp, Warning, TEXT("[Inv] AddItem=%s Ptr=%p"), *GetNameSafe(Item), Item);
+	
 	auto AddNewStack = [&](int32 Qty) -> bool
 	{
 		if (Stacks.Num() >= MaxSlots) return false;
@@ -64,6 +66,7 @@ int32 UInventorySubsystem::AddItem(UItemDataAsset* Item, int32 Amount)
 	{
 		OnInventoryChanged.Broadcast();
 	}
+	
 	
 	return AddedTotal;
 }
