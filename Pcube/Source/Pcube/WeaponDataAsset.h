@@ -4,6 +4,7 @@
 
 #include "CoreMinimal.h"
 #include "Engine/DataAsset.h"
+#include "UnitStatTypes.h"
 #include "WeaponModTypes.h"
 #include "WeaponDataAsset.generated.h"
 
@@ -12,23 +13,22 @@ struct FWeaponModSlotDef
 {
 	GENERATED_BODY()
 
-	// 저장/조회용 고정 ID (예: "Muzzle", "GripA", "Rail_Left")
+	// 논리 파츠 슬롯 식별자. CompatibleEquipmentKeys와 직접 매칭된다.
+	// 예: KnightSword_Blade, KnightSword_Grip, MageStaff_Core
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Slot")
 	FName SlotId = NAME_None;
 
-	// 호환 타입(필터 기준)
+	// 레거시/분류용 타입. 현재 호환 판정의 주 기준은 SlotId.
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Slot")
 	EWeaponModSlotType SlotType = EWeaponModSlotType::Custom;
 
-	// 실제 무기 메시의 소켓 이름(부착 위치)
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Slot")
+	// 실제 메시 소켓이 필요할 때만 사용하는 시각용 데이터.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Slot|Visual")
 	FName SocketName = NAME_None;
 
-	// UI 상에 슬롯 버튼을 배치할 위치 (0~1 정규화 좌표)
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Slot|UI", meta=(ClampMin="0.0", ClampMax="1.0"))
 	FVector2D UIAnchor = FVector2D(0.5f, 0.5f);
 
-	// 미세 조정 픽셀 오프셋
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Slot|UI")
 	FVector2D UIPixelOffset = FVector2D(0.f, 0.f);
 
@@ -69,12 +69,16 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Weapon")
 	TObjectPtr<UTexture2D> Icon = nullptr;
 
-	// 무기 본체 메쉬
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Weapon|UI")
+	TObjectPtr<UTexture2D> IllustrationTexture = nullptr;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Weapon|Stats")
+	FEquipmentStatBonus BaseStatBonus;
+
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Weapon|Visual")
 	TObjectPtr<UStaticMesh> WeaponMesh = nullptr;
 
-	// 이 무기의 모딩 슬롯 정의(개수/소켓/UI 위치 전부 여기서 결정)
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Weapon|Mod")
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Weapon|Parts")
 	TArray<FWeaponModSlotDef> ModSlots;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Weapon|Preview")

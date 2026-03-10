@@ -112,13 +112,23 @@ void ABattlePlayerController::HandleActionRequested(USkillDataAsset* SkillData)
 	if (!BattleSub || !SkillData) return;
 	
 	if (BattleHUD) BattleHUD->HideActionMenu();
-
+	
+	// 마우스로 적 클릭하여 선택
+	ApplyInputMode_GameOnly(true);
+	
+	// 전투 호출
 	BattleSub->RequestUseSkill(SkillData);
 }
 
 void ABattlePlayerController::HandleSkillRequested(USkillDataAsset* Skill)
 {
 	if (!IsValid(Skill)) return;
+	
+	if (!BattleHUD) CacheBattleHUD();
+	if (BattleHUD)
+	{
+		BattleHUD->ShowActionIntentForSkill(Skill);
+	}
 	
 	// 전체 타겟 -> default camera로 전환
 	if (Skill->TargetType == ESkillTargetRule::AllEnemis ||
@@ -173,7 +183,7 @@ void ABattlePlayerController::FocusViewTarget(AActor* Target, float BlendTime)
 {
 	if (!IsValid(Target)) return;
 	
-	// 시네마틱 카메라가 붙어있는 유닛 Actor로 뷰타겟 전환
+	// 카메라가 붙어있는 유닛 Actor로 뷰타겟 전환
 	SetViewTargetWithBlend(Target, BlendTime, VTBlend_Cubic);
 }
 
@@ -229,7 +239,6 @@ void ABattlePlayerController::HandleTurnUnitChanged(ABattleBaseUnit* ActiveUnit)
 		
 		if (BattleHUD)
 		{
-			// TODO: 아래 함수 구현
 			BattleHUD->ShowActionMenu(AllyUnit);
 			ApplyInputMode_GameAndUI(BattleHUD->GetActionMenuWidget(), true);
 		}
@@ -246,7 +255,6 @@ void ABattlePlayerController::HandleTurnUnitChanged(ABattleBaseUnit* ActiveUnit)
 	
 	if (BattleHUD)
 	{
-		// TODO: 아래 함수 구현
 		BattleHUD->HideActionMenu();
 	}
 	
@@ -289,10 +297,6 @@ void ABattlePlayerController::HandleBattleStateChanged(EBattleState NewState)
 		FocusDefaultBattleCamera(0.5f);
 		break;
 		
-	// case EBattleState::ActionInput:
-		// 다시 입력 상태가 되면 현재 턴인 유닛을 비추도록 처리
-		
-		
 	default:
 		break;
 	}
@@ -301,6 +305,7 @@ void ABattlePlayerController::HandleBattleStateChanged(EBattleState NewState)
 void ABattlePlayerController::HandleBattleFinished(EBattleResult Result)
 {
 	if (!BattleHUD) CacheBattleHUD();
+	if (BattleHUD) BattleHUD->HideActionIntent();
 	
 	ApplyInputMode_GameAndUI(nullptr, true); // 커서 켜서 UI 조작 가능 - 필요 시 위젯 포커스 지정하기
 	
@@ -316,6 +321,10 @@ void ABattlePlayerController::HandleBattleFinished(EBattleResult Result)
 		}
 		
 		UE_LOG(LogTemp, Error, TEXT("[Battle] Defeat -> GameOver -> Open MainMenu Level"));
+		if (BattleHUD) BattleHUD->ShowGameOverUI();
+		
+		// TODO: 메인메뉴 OpenLevel
+		
 		return;
 	}
 	
@@ -362,7 +371,7 @@ void ABattlePlayerController::HandleBattleFinished(EBattleResult Result)
 	FTimerHandle TH;
 	GetWorld()->GetTimerManager().SetTimer(TH, [this]()
 	{
-		UGameplayStatics::OpenLevel(this, FName("WorldLevel"));
+		UGameplayStatics::OpenLevel(this, FName("L_World"));
 	}, 2.0f, false);
 }
 
@@ -379,7 +388,8 @@ void ABattlePlayerController::SetupInputComponent()
 	InputComponent->BindKey(EKeys::E, IE_Pressed, this, &ABattlePlayerController::Input_NextTarget);
 	InputComponent->BindKey(EKeys::F, IE_Pressed, this, &ABattlePlayerController::Input_ConfirmTarget);
 	InputComponent->BindKey(EKeys::LeftMouseButton, IE_Pressed, this, &ABattlePlayerController::Input_ClickConfirmTarget);
-	InputComponent->BindKey(EKeys::Escape, IE_Pressed, this, &ABattlePlayerController::Input_CancelTarget);
+	InputComponent->BindKey(EKeys::Escape, IE_Pressed, this, &ABattlePlayerController::Input_BackOrCancel);
+	InputComponent->BindKey(EKeys::RightMouseButton, IE_Pressed, this, &ABattlePlayerController::Input_BackOrCancel);
 }
 
 void ABattlePlayerController::Input_NextTarget()
@@ -426,6 +436,11 @@ void ABattlePlayerController::Input_ClickConfirmTarget()
 	
 	// 2. 즉시 확정
 	BattleSub->ConfirmTarget();
+}
+
+void ABattlePlayerController::Input_BackOrCancel()
+{
+	Input_CancelTarget();
 }
 
 void ABattlePlayerController::Input_CancelTarget()

@@ -1,17 +1,19 @@
 #include "EquipPartsWindowWidget.h"
 
+#include "ArmorDataAsset.h"
 #include "EquipPartsSlotWidget.h"
+#include "EquipSlotWidget.h"
 #include "EquipmentSubsystem.h"
 #include "InventorySubsystem.h"
-#include "BattleInfoTransferSubsystem.h"
-#include "WeaponDataAsset.h"
 #include "WeaponPartDataAsset.h"
 
 #include "Components/Button.h"
+#include "Components/CanvasPanel.h"
+#include "Components/CanvasPanelSlot.h"
+#include "Components/Image.h"
 #include "Components/TextBlock.h"
 #include "Components/UniformGridPanel.h"
 #include "Components/UniformGridSlot.h"
-#include "Blueprint/WidgetLayoutLibrary.h"
 
 void UEquipPartsWindowWidget::NativeConstruct()
 {
@@ -21,13 +23,18 @@ void UEquipPartsWindowWidget::NativeConstruct()
 	{
 		EquipmentSubsystem = GI->GetSubsystem<UEquipmentSubsystem>();
 		InventorySubsystem = GI->GetSubsystem<UInventorySubsystem>();
-		TransferSubsystem = GI->GetSubsystem<UBattleInfoTransferSubsystem>();
 	}
 
 	if (Btn_Close)
 	{
 		Btn_Close->OnClicked.RemoveDynamic(this, &UEquipPartsWindowWidget::HandleCloseClicked);
 		Btn_Close->OnClicked.AddDynamic(this, &UEquipPartsWindowWidget::HandleCloseClicked);
+	}
+
+	if (InventorySubsystem)
+	{
+		InventorySubsystem->OnInventoryChanged.RemoveDynamic(this, &UEquipPartsWindowWidget::HandleInventoryChanged);
+		InventorySubsystem->OnInventoryChanged.AddDynamic(this, &UEquipPartsWindowWidget::HandleInventoryChanged);
 	}
 
 	if (EquipmentSubsystem)
@@ -41,6 +48,11 @@ void UEquipPartsWindowWidget::NativeConstruct()
 
 void UEquipPartsWindowWidget::NativeDestruct()
 {
+	if (InventorySubsystem)
+	{
+		InventorySubsystem->OnInventoryChanged.RemoveDynamic(this, &UEquipPartsWindowWidget::HandleInventoryChanged);
+	}
+
 	if (EquipmentSubsystem)
 	{
 		EquipmentSubsystem->OnEquipmentChanged.RemoveDynamic(this, &UEquipPartsWindowWidget::HandleEquipmentChanged);
@@ -49,142 +61,304 @@ void UEquipPartsWindowWidget::NativeDestruct()
 	Super::NativeDestruct();
 }
 
-bool UEquipPartsWindowWidget::OpenForEquipment(int32 InPartyIndex, FName InEquipmentKey)
+void UEquipPartsWindowWidget::ResetActiveEquipment()
 {
-	OpenPartyIndex = InPartyIndex;
-	OpenEquipmentKey = InEquipmentKey;
-	ResolvedWeapon = nullptr;
+	ActiveWeapon = nullptr;
+	ActiveArmor = nullptr;
+	EquipmentButtonKey = NAME_None;
+	SelectedPartSlotKey = NAME_None;
+	PartyIndex = INDEX_NONE;
+}
 
-	FPlayerInfoEquipmentButtonDef Def;
-	if (!ResolveEquipmentButtonDef(Def))
-	{
-		CloseWindow();
-		return false;
-	}
-
-	// 현재 코드베이스에서 실동작하는 장비 컨테이너는 Weapon뿐이다.
-	if (Def.Kind != EPlayerInfoEquipmentKind::Weapon)
-	{
-		CloseWindow();
-		return false;
-	}
-
-	ResolvedWeapon = ResolveTargetWeapon(Def);
-	if (!ResolvedWeapon)
-	{
-		CloseWindow();
-		return false;
-	}
-
+void UEquipPartsWindowWidget::OpenForWeapon(int32 InPartyIndex, FName InEquipmentButtonKey, UWeaponDataAsset* InWeapon)
+{
+	ResetActiveEquipment();
+	PartyIndex = InPartyIndex;
+	EquipmentButtonKey = InEquipmentButtonKey;
+	CurrentEquipmentKind = EPlayerInfoEquipmentKind::Weapon;
+	ActiveWeapon = InWeapon;
+	AutoSelectFirstSlotIfNeeded();
 	SetVisibility(ESlateVisibility::Visible);
-	RefreshWindow();
-	return true;
+	Refresh();
 }
 
-void UEquipPartsWindowWidget::CloseWindow()
+void UEquipPartsWindowWidget::OpenForArmor(int32 InPartyIndex, FName InEquipmentButtonKey, UArmorDataAsset* InArmor)
 {
-	OpenPartyIndex = INDEX_NONE;
-	OpenEquipmentKey = NAME_None;
-	ResolvedWeapon = nullptr;
+	ResetActiveEquipment();
+	PartyIndex = InPartyIndex;
+	EquipmentButtonKey = InEquipmentButtonKey;
+	CurrentEquipmentKind = EPlayerInfoEquipmentKind::Armor;
+	ActiveArmor = InArmor;
+	AutoSelectFirstSlotIfNeeded();
+	SetVisibility(ESlateVisibility::Visible);
+	Refresh();
+}
+
+
+// void UEquipPartsWindowWidget::OpenForEquipment(int32 InPartyIndex, FName InEquipmentKey)
+// {
+// 	PartyIndex = InPartyIndex;
+// 	EquipmentKey = InEquipmentKey;
+// 	SetVisibility(ESlateVisibility::Visible);
+// 	Refresh();
+// }
+
+void UEquipPartsWindowWidget::Close()
+{
 	SetVisibility(ESlateVisibility::Collapsed);
-}
-
-bool UEquipPartsWindowWidget::IsOpenFor(int32 InPartyIndex, FName InEquipmentKey) const
-{
-	return GetVisibility() == ESlateVisibility::Visible
-		&& OpenPartyIndex == InPartyIndex
-		&& OpenEquipmentKey == InEquipmentKey;
-}
-
-void UEquipPartsWindowWidget::SetWindowScreenPosition(FVector2D InViewportPos)
-{
-	FVector2D FinalPos = InViewportPos;
-	const FVector2D ViewportSize = UWidgetLayoutLibrary::GetViewportSize(this);
-	const FVector2D Desired = GetDesiredSize();
-
-	if (ViewportSize.X > 0.f && ViewportSize.Y > 0.f)
+	if (Canvas_Slots)
 	{
-		FinalPos.X = FMath::Clamp(FinalPos.X, 0.f, FMath::Max(0.f, ViewportSize.X - Desired.X));
-		FinalPos.Y = FMath::Clamp(FinalPos.Y, 0.f, FMath::Max(0.f, ViewportSize.Y - Desired.Y));
+		Canvas_Slots->ClearChildren();
 	}
-
-	SetPositionInViewport(FinalPos, false);
-}
-
-void UEquipPartsWindowWidget::HandleCloseClicked()
-{
-	CloseWindow();
-}
-
-void UEquipPartsWindowWidget::HandleEquipmentChanged(int32 ChangedPartyIndex)
-{
-	if (ChangedPartyIndex != OpenPartyIndex) return;
-	if (GetVisibility() != ESlateVisibility::Visible) return;
-	RefreshWindow();
-}
-
-void UEquipPartsWindowWidget::HandleSlotEquipRequested(FName SlotSocketName, UWeaponPartDataAsset* PartToEquip)
-{
-	if (!EquipmentSubsystem || OpenPartyIndex == INDEX_NONE || !PartToEquip) return;
-
-	if (EquipmentSubsystem->EquipWeaponPart(OpenPartyIndex, SlotSocketName, PartToEquip))
+	if (Grid_Parts)
 	{
-		RefreshWindow();
+		Grid_Parts->ClearChildren();
 	}
+	ResetActiveEquipment();
 }
 
-void UEquipPartsWindowWidget::HandleSlotUnequipRequested(FName SlotSocketName)
+const TArray<FWeaponModSlotDef>* UEquipPartsWindowWidget::GetActiveSlots() const
 {
-	if (!EquipmentSubsystem || OpenPartyIndex == INDEX_NONE) return;
-
-	if (EquipmentSubsystem->UnequipWeaponPart(OpenPartyIndex, SlotSocketName))
+	if (CurrentEquipmentKind == EPlayerInfoEquipmentKind::Weapon && ActiveWeapon)
 	{
-		RefreshWindow();
+		return &ActiveWeapon->ModSlots;
 	}
+	if (CurrentEquipmentKind == EPlayerInfoEquipmentKind::Armor && ActiveArmor)
+	{
+		return &ActiveArmor->ModSlots;
+	}
+	return nullptr;
 }
 
-void UEquipPartsWindowWidget::RefreshWindow()
+UTexture2D* UEquipPartsWindowWidget::GetActiveIllustration() const
 {
-	if (!Grid_Slots || !ResolvedWeapon || !SlotWidgetClass)
+	if (CurrentEquipmentKind == EPlayerInfoEquipmentKind::Weapon && ActiveWeapon)
+	{
+		return ActiveWeapon->IllustrationTexture ? ActiveWeapon->IllustrationTexture : ActiveWeapon->Icon;
+	}
+	if (CurrentEquipmentKind == EPlayerInfoEquipmentKind::Armor && ActiveArmor)
+	{
+		return ActiveArmor->IllustrationTexture ? ActiveArmor->IllustrationTexture : ActiveArmor->Icon;
+	}
+	return nullptr;
+}
+
+FText UEquipPartsWindowWidget::GetActiveTitle() const
+{
+	if (CurrentEquipmentKind == EPlayerInfoEquipmentKind::Weapon && ActiveWeapon)
+	{
+		return !ActiveWeapon->DisplayName.IsEmpty() ? ActiveWeapon->DisplayName : FText::FromName(EquipmentButtonKey);
+	}
+	if (CurrentEquipmentKind == EPlayerInfoEquipmentKind::Armor && ActiveArmor)
+	{
+		return !ActiveArmor->DisplayName.IsEmpty() ? ActiveArmor->DisplayName : FText::FromName(EquipmentButtonKey);
+	}
+	return FText::FromName(EquipmentButtonKey);
+}
+
+void UEquipPartsWindowWidget::AutoSelectFirstSlotIfNeeded()
+{
+	if (SelectedPartSlotKey != NAME_None)
 	{
 		return;
 	}
 
-	Grid_Slots->ClearChildren();
+	if (const TArray<FWeaponModSlotDef>* Slots = GetActiveSlots())
+	{
+		if (Slots->Num() > 0)
+		{
+			SelectedPartSlotKey = (*Slots)[0].SlotId;
+		}
+	}
+}
+
+void UEquipPartsWindowWidget::Refresh()
+{
+	if (GetVisibility() == ESlateVisibility::Collapsed)
+	{
+		return;
+	}
+
+	AutoSelectFirstSlotIfNeeded();
 
 	if (Text_Title)
 	{
-		Text_Title->SetText(ResolvedWeapon->DisplayName.IsEmpty()
-			? FText::FromName(OpenEquipmentKey)
-			: ResolvedWeapon->DisplayName);
+		Text_Title->SetText(GetActiveTitle());
 	}
 
-	for (int32 SlotIndex = 0; SlotIndex < ResolvedWeapon->ModSlots.Num(); ++SlotIndex)
+	if (Img_EquipmentIllustration)
 	{
-		const FWeaponModSlotDef& Def = ResolvedWeapon->ModSlots[SlotIndex];
-		if (Def.SocketName == NAME_None) continue;
-
-		UEquipPartsSlotWidget* SlotWidget = CreateWidget<UEquipPartsSlotWidget>(GetOwningPlayer(), SlotWidgetClass);
-		if (!SlotWidget) continue;
-
-		SlotWidget->InitSlot(Def.SocketName, Def.DisplayName.IsEmpty() ? FText::FromName(Def.SlotId) : Def.DisplayName);
-
-		if (EquipmentSubsystem)
+		if (UTexture2D* Illustration = GetActiveIllustration())
 		{
-			SlotWidget->SetEquipped(EquipmentSubsystem->GetEquippedPart(OpenPartyIndex, Def.SocketName));
+			Img_EquipmentIllustration->SetBrushFromTexture(Illustration);
+			Img_EquipmentIllustration->SetVisibility(ESlateVisibility::Visible);
+		}
+		else
+		{
+			Img_EquipmentIllustration->SetVisibility(ESlateVisibility::Hidden);
+		}
+	}
+
+	RebuildSlotCanvas();
+	RebuildCandidateGrid();
+}
+
+void UEquipPartsWindowWidget::HandleCloseClicked()
+{
+	Close();
+}
+
+void UEquipPartsWindowWidget::HandleInventoryChanged()
+{
+	Refresh();
+}
+
+void UEquipPartsWindowWidget::HandleEquipmentChanged(int32 ChangedPartyIndex)
+{
+	if (ChangedPartyIndex == PartyIndex)
+	{
+		Refresh();
+	}
+}
+
+void UEquipPartsWindowWidget::HandlePartSlotSelected(FName PartSlotKey)
+{
+	if (PartSlotKey == NAME_None) return;
+	SelectedPartSlotKey = PartSlotKey;
+	Refresh();
+}
+
+void UEquipPartsWindowWidget::HandlePartSlotUnequip(FName PartSlotKey)
+{
+	if (!EquipmentSubsystem || PartSlotKey == NAME_None || PartyIndex == INDEX_NONE)
+	{
+		return;
+	}
+
+	if (EquipmentSubsystem->UnequipWeaponPart(PartyIndex, PartSlotKey))
+	{
+		SelectedPartSlotKey = PartSlotKey;
+		Refresh();
+	}
+}
+
+void UEquipPartsWindowWidget::HandlePartCandidateClicked(UWeaponPartDataAsset* Part)
+{
+	if (!EquipmentSubsystem || !Part || PartyIndex == INDEX_NONE || SelectedPartSlotKey == NAME_None)
+	{
+		return;
+	}
+
+	if (EquipmentSubsystem->EquipWeaponPart(PartyIndex, SelectedPartSlotKey, Part))
+	{
+		Refresh();
+	}
+}
+
+void UEquipPartsWindowWidget::RebuildSlotCanvas()
+{
+	if (!Canvas_Slots)
+	{
+		return;
+	}
+
+	Canvas_Slots->ClearChildren();
+
+	if (!EquipSlotWidgetClass || !EquipmentSubsystem || PartyIndex == INDEX_NONE)
+	{
+		return;
+	}
+
+	const TArray<FWeaponModSlotDef>* Slots = GetActiveSlots();
+	if (!Slots)
+	{
+		return;
+	}
+
+	for (const FWeaponModSlotDef& Def : *Slots)
+	{
+		if (Def.SlotId == NAME_None)
+		{
+			continue;
 		}
 
-		TArray<UWeaponPartDataAsset*> CompatibleParts;
-		GatherCompatibleParts(ResolvedWeapon, Def.SocketName, CompatibleParts);
-		SlotWidget->SetCompatibleParts(CompatibleParts);
+		UEquipSlotWidget* SlotWidget = CreateWidget<UEquipSlotWidget>(GetOwningPlayer(), EquipSlotWidgetClass);
+		if (!SlotWidget) continue;
 
-		SlotWidget->OnEquipRequested.RemoveDynamic(this, &UEquipPartsWindowWidget::HandleSlotEquipRequested);
-		SlotWidget->OnEquipRequested.AddDynamic(this, &UEquipPartsWindowWidget::HandleSlotEquipRequested);
-		SlotWidget->OnUnequipRequested.RemoveDynamic(this, &UEquipPartsWindowWidget::HandleSlotUnequipRequested);
-		SlotWidget->OnUnequipRequested.AddDynamic(this, &UEquipPartsWindowWidget::HandleSlotUnequipRequested);
+		SlotWidget->InitSlot(Def.SlotId, Def.DisplayName);
+		SlotWidget->SetEquipped(EquipmentSubsystem->GetEquippedPart(PartyIndex, Def.SlotId));
+		SlotWidget->SetRenderOpacity(SelectedPartSlotKey == Def.SlotId ? 1.f : 0.6f);
+		SlotWidget->OnSelected.RemoveDynamic(this, &UEquipPartsWindowWidget::HandlePartSlotSelected);
+		SlotWidget->OnSelected.AddDynamic(this, &UEquipPartsWindowWidget::HandlePartSlotSelected);
+		SlotWidget->OnUnequip.RemoveDynamic(this, &UEquipPartsWindowWidget::HandlePartSlotUnequip);
+		SlotWidget->OnUnequip.AddDynamic(this, &UEquipPartsWindowWidget::HandlePartSlotUnequip);
 
-		UUniformGridSlot* GridSlot = Grid_Slots->AddChildToUniformGrid(SlotWidget, SlotIndex / 2, SlotIndex % 2);
-		if (GridSlot)
+		if (UCanvasPanelSlot* CanvasSlot = Canvas_Slots->AddChildToCanvas(SlotWidget))
+		{
+			CanvasSlot->SetAutoSize(false);
+			CanvasSlot->SetAnchors(FAnchors(Def.UIAnchor.X, Def.UIAnchor.Y, Def.UIAnchor.X, Def.UIAnchor.Y));
+			CanvasSlot->SetAlignment(FVector2D(0.5f, 0.5f));
+			CanvasSlot->SetPosition(Def.UIPixelOffset);
+			CanvasSlot->SetSize(SlotWidgetSize);
+		}
+	}
+}
+
+void UEquipPartsWindowWidget::RebuildCandidateGrid()
+{
+	if (!Grid_Parts)
+	{
+		return;
+	}
+
+	Grid_Parts->ClearChildren();
+
+	if (!InventorySubsystem || !EquipmentSubsystem || !PartCandidateWidgetClass || PartyIndex == INDEX_NONE || SelectedPartSlotKey == NAME_None)
+	{
+		return;
+	}
+
+	TMap<TObjectPtr<UWeaponPartDataAsset>, int32> CompatibleParts;
+	for (const FInventoryStack& Stack : InventorySubsystem->GetAllStacks())
+	{
+		UWeaponPartDataAsset* Part = Cast<UWeaponPartDataAsset>(Stack.Item);
+		if (!Part || Stack.Quantity <= 0)
+		{
+			continue;
+		}
+
+		if (!EquipmentSubsystem->CanEquipWeaponPart(PartyIndex, SelectedPartSlotKey, Part))
+		{
+			continue;
+		}
+
+		CompatibleParts.FindOrAdd(Part) += Stack.Quantity;
+	}
+
+	TArray<TPair<TObjectPtr<UWeaponPartDataAsset>, int32>> Entries;
+	for (const TPair<TObjectPtr<UWeaponPartDataAsset>, int32>& Pair : CompatibleParts)
+	{
+		Entries.Add(Pair);
+	}
+
+	Entries.Sort([](const TPair<TObjectPtr<UWeaponPartDataAsset>, int32>& A, const TPair<TObjectPtr<UWeaponPartDataAsset>, int32>& B)
+	{
+		const FString NameA = A.Key ? A.Key->DisplayName.ToString() : FString();
+		const FString NameB = B.Key ? B.Key->DisplayName.ToString() : FString();
+		return NameA < NameB;
+	});
+
+	const int32 Count = FMath::Min(MaxSlots, Entries.Num());
+	for (int32 Index = 0; Index < Count; ++Index)
+	{
+		UEquipPartsSlotWidget* CandidateWidget = CreateWidget<UEquipPartsSlotWidget>(GetOwningPlayer(), PartCandidateWidgetClass);
+		if (!CandidateWidget) continue;
+
+		CandidateWidget->Init(Entries[Index].Key, Entries[Index].Value);
+		CandidateWidget->OnClicked.RemoveDynamic(this, &UEquipPartsWindowWidget::HandlePartCandidateClicked);
+		CandidateWidget->OnClicked.AddDynamic(this, &UEquipPartsWindowWidget::HandlePartCandidateClicked);
+
+		if (UUniformGridSlot* GridSlot = Grid_Parts->AddChildToUniformGrid(CandidateWidget, Index / Cols, Index % Cols))
 		{
 			GridSlot->SetHorizontalAlignment(HAlign_Fill);
 			GridSlot->SetVerticalAlignment(VAlign_Fill);
@@ -192,75 +366,79 @@ void UEquipPartsWindowWidget::RefreshWindow()
 	}
 }
 
-bool UEquipPartsWindowWidget::ResolveEquipmentButtonDef(FPlayerInfoEquipmentButtonDef& OutDef) const
-{
-	UUnitDataAsset* UnitDA = GetPartyUnitData(OpenPartyIndex);
-	if (!UnitDA) return false;
 
-	for (const FPlayerInfoEquipmentButtonDef& Def : UnitDA->PlayerInfoEquipButtons)
-	{
-		if (Def.EquipmentKey == OpenEquipmentKey)
-		{
-			OutDef = Def;
-			return true;
-		}
-	}
+// void UEquipPartsWindowWidget::HandlePartSlotSelected(UWeaponPartDataAsset* Part)
+// {
+// 	if (!EquipmentSubsystem || !Part || PartyIndex == INDEX_NONE || EquipmentKey == NAME_None)
+// 	{
+// 		return;
+// 	}
+//
+// 	if (EquipmentSubsystem->EquipWeaponPart(PartyIndex, EquipmentKey, Part))
+// 	{
+// 		Refresh();
+// 	}
+// }
 
-	return false;
-}
-
-UUnitDataAsset* UEquipPartsWindowWidget::GetPartyUnitData(int32 PartyIndex) const
-{
-	if (!TransferSubsystem) return nullptr;
-	if (!TransferSubsystem->BattleInfo.AlliesToSpawn.IsValidIndex(PartyIndex)) return nullptr;
-
-	const TSoftObjectPtr<UUnitDataAsset> Soft = TransferSubsystem->BattleInfo.AlliesToSpawn[PartyIndex].UnitDataAsset;
-	return Soft.IsNull() ? nullptr : Soft.LoadSynchronous();
-}
-
-UWeaponDataAsset* UEquipPartsWindowWidget::ResolveTargetWeapon(const FPlayerInfoEquipmentButtonDef& Def) const
-{
-	if (Def.WeaponOverride)
-	{
-		return Def.WeaponOverride;
-	}
-
-	if (EquipmentSubsystem)
-	{
-		if (UWeaponDataAsset* Equipped = EquipmentSubsystem->GetEquippedWeapon(OpenPartyIndex))
-		{
-			return Equipped;
-		}
-	}
-
-	if (UUnitDataAsset* UnitDA = GetPartyUnitData(OpenPartyIndex))
-	{
-		return UnitDA->DefaultWeapon;
-	}
-
-	return nullptr;
-}
-
-void UEquipPartsWindowWidget::GatherCompatibleParts(UWeaponDataAsset* Weapon, FName SlotSocketName, TArray<UWeaponPartDataAsset*>& OutParts) const
-{
-	OutParts.Reset();
-	if (!Weapon || !InventorySubsystem || !EquipmentSubsystem) return;
-
-	for (const FInventoryStack& Stack : InventorySubsystem->GetAllStacks())
-	{
-		if (Stack.Quantity <= 0 || !Stack.Item) continue;
-
-		UWeaponPartDataAsset* Part = Cast<UWeaponPartDataAsset>(Stack.Item);
-		if (!Part) continue;
-
-		if (EquipmentSubsystem->IsPartCompatibleWithWeapon(Weapon, SlotSocketName, Part))
-		{
-			OutParts.AddUnique(Part);
-		}
-	}
-
-	OutParts.Sort([](const UWeaponPartDataAsset& A, const UWeaponPartDataAsset& B)
-	{
-		return A.DisplayName.ToString() < B.DisplayName.ToString();
-	});
-}
+// void UEquipPartsWindowWidget::RebuildGrid()
+// {
+// 	if (!Grid_Parts)
+// 	{
+// 		return;
+// 	}
+//
+// 	Grid_Parts->ClearChildren();
+//
+// 	if (!InventorySubsystem || !EquipmentSubsystem || !PartCandidateWidgetClass || PartyIndex == INDEX_NONE || EquipmentKey == NAME_None)
+// 	{
+// 		return;
+// 	}
+//
+// 	TMap<TObjectPtr<UWeaponPartDataAsset>, int32> CompatibleParts;
+//
+// 	for (const FInventoryStack& Stack : InventorySubsystem->GetAllStacks())
+// 	{
+// 		UWeaponPartDataAsset* Part = Cast<UWeaponPartDataAsset>(Stack.Item);
+// 		if (!Part || Stack.Quantity <= 0)
+// 		{
+// 			continue;
+// 		}
+//
+// 		if (!EquipmentSubsystem->CanEquipWeaponPart(PartyIndex, EquipmentKey, Part))
+// 		{
+// 			continue;
+// 		}
+//
+// 		CompatibleParts.FindOrAdd(Part) += Stack.Quantity;
+// 	}
+//
+// 	TArray<TPair<TObjectPtr<UWeaponPartDataAsset>, int32>> Entries;
+// 	for (const TPair<TObjectPtr<UWeaponPartDataAsset>, int32>& It : CompatibleParts)
+// 	{
+// 		Entries.Add(It);
+// 	}
+//
+// 	Entries.Sort([](const TPair<TObjectPtr<UWeaponPartDataAsset>, int32>& A, const TPair<TObjectPtr<UWeaponPartDataAsset>, int32>& B)
+// 	{
+// 		const FString NameA = A.Key ? A.Key->DisplayName.ToString() : FString();
+// 		const FString NameB = B.Key ? B.Key->DisplayName.ToString() : FString();
+// 		return NameA < NameB;
+// 	});
+//
+// 	const int32 Count = FMath::Min(MaxSlots, Entries.Num());
+// 	for (int32 i = 0; i < Count; ++i)
+// 	{
+// 		UEquipPartsSlotWidget* PartsSlot = CreateWidget<UEquipPartsSlotWidget>(GetOwningPlayer(), PartCandidateWidgetClass);
+// 		if (!PartsSlot) continue;
+//
+// 		PartsSlot->Init(Entries[i].Key, Entries[i].Value);
+// 		PartsSlot->OnClicked.RemoveDynamic(this, &UEquipPartsWindowWidget::HandlePartSlotSelected);
+// 		PartsSlot->OnClicked.AddDynamic(this, &UEquipPartsWindowWidget::HandlePartSlotSelected);
+//
+// 		if (UUniformGridSlot* GridSlot = Grid_Parts->AddChildToUniformGrid(PartsSlot, i / Cols, i % Cols))
+// 		{
+// 			GridSlot->SetHorizontalAlignment(HAlign_Fill);
+// 			GridSlot->SetVerticalAlignment(VAlign_Fill);
+// 		}
+// 	}
+// }

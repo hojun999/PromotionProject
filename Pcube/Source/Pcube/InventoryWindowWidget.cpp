@@ -9,6 +9,7 @@
 #include "Components/Button.h"
 #include "Components/TextBlock.h"
 #include "GameFramework/PlayerController.h"
+#include "WorldPlayerController.h"
 
 void UInventoryWindowWidget::NativeConstruct()
 {
@@ -62,6 +63,16 @@ void UInventoryWindowWidget::Open()
 void UInventoryWindowWidget::Close()
 {
 	SetVisibility(ESlateVisibility::Collapsed);
+	
+	if (AWorldPlayerController* PC = Cast<AWorldPlayerController>(GetOwningPlayer()))
+	{
+		if (AWorldHUD* WHUD = Cast<AWorldHUD>(PC->GetHUD()))
+		{
+			WHUD->CloseAnyOpenPanel();
+			WHUD->ApplyInputMode_GameOnly();
+			WHUD->SetWorldInputBlocked(false);
+		}
+	}
 }
 
 void UInventoryWindowWidget::HandleCloseClicked()

@@ -9,6 +9,8 @@
 #include "BattleInfoTransferSubsystem.h"
 #include "UnitDataAsset.h"
 #include "WeaponDataAsset.h"
+#include "WorldHUD.h"
+#include "WorldPlayerController.h"
 
 #include "Components/Button.h"
 #include "Components/TextBlock.h"
@@ -27,14 +29,17 @@ void UPlayerInfoWindowWidget::NativeConstruct()
 		TransferSubsystem = GI->GetSubsystem<UBattleInfoTransferSubsystem>();
 	}
 
+	// 기본 장비 상태 준비
 	if (EquipmentSubsystem)
 	{
+		EquipmentSubsystem->EnsurePartySize(GetPartyCount());
+		EnsureSelectedLoadoutInitialized();
+		
 		EquipmentSubsystem->OnEquipmentChanged.RemoveDynamic(this, &UPlayerInfoWindowWidget::HandleEquipmentChanged);
 		EquipmentSubsystem->OnEquipmentChanged.AddDynamic(this, &UPlayerInfoWindowWidget::HandleEquipmentChanged);
-		EquipmentSubsystem->EnsurePartySize(GetPartyCount());
 	}
 
-	EnsureDefaultWeaponsInitialized();
+	//EnsureDefaultWeaponsInitialized();
 
 	if (Btn_Ally0)
 	{
@@ -79,13 +84,15 @@ void UPlayerInfoWindowWidget::NativeDestruct()
 		EquipmentSubsystem->OnEquipmentChanged.RemoveDynamic(this, &UPlayerInfoWindowWidget::HandleEquipmentChanged);
 	}
 
+	ClosePartsWindow();
 	Super::NativeDestruct();
 }
 
 void UPlayerInfoWindowWidget::Open()
 {
-	EnsureDefaultWeaponsInitialized();
+	//EnsureDefaultWeaponsInitialized();
 	SetVisibility(ESlateVisibility::Visible);
+	EnsureSelectedLoadoutInitialized();
 	RefreshPortraitButtons();
 	SelectPartyMember(SelectedPartyIndex);
 }
@@ -94,6 +101,16 @@ void UPlayerInfoWindowWidget::Close()
 {
 	HideEquipPartsWindow();
 	SetVisibility(ESlateVisibility::Collapsed);
+	
+	if (AWorldPlayerController* PC = Cast<AWorldPlayerController>(GetOwningPlayer()))
+	{
+		if (AWorldHUD* WHUD = Cast<AWorldHUD>(PC->GetHUD()))
+		{
+			WHUD->CloseAnyOpenPanel();
+			WHUD->ApplyInputMode_GameOnly();
+			WHUD->SetWorldInputBlocked(false);
+		}
+	}
 }
 
 int32 UPlayerInfoWindowWidget::GetPartyCount() const
@@ -111,6 +128,16 @@ UUnitDataAsset* UPlayerInfoWindowWidget::GetPartyUnitData(int32 PartyIndex) cons
 	if (Soft.IsNull()) return nullptr;
 
 	return Soft.LoadSynchronous();
+}
+
+void UPlayerInfoWindowWidget::EnsureSelectedLoadoutInitialized()
+{
+	if (!EquipmentSubsystem) return;
+	EquipmentSubsystem->EnsurePartySize(GetPartyCount());
+	if (UUnitDataAsset* UnitDA = GetPartyUnitData(SelectedPartyIndex))
+	{
+		EquipmentSubsystem->InitializeUnitLoadoutIfMissing(SelectedPartyIndex, UnitDA);
+	}
 }
 
 void UPlayerInfoWindowWidget::EnsureDefaultWeaponsInitialized()
@@ -137,6 +164,39 @@ void UPlayerInfoWindowWidget::EnsureDefaultWeaponsInitialized()
 	}
 }
 
+const FPlayerInfoEquipmentButtonDef* UPlayerInfoWindowWidget::FindEquipmentButtonDef(FName EquipmentKey) const
+{
+	return EquipmentButtonDefsByKey.Find(EquipmentKey);
+}
+
+UWeaponDataAsset* UPlayerInfoWindowWidget::ResolveCurrentWeaponForUI(const FPlayerInfoEquipmentButtonDef& Def, UUnitDataAsset* UnitDA) const
+{
+	UWeaponDataAsset* Weapon = EquipmentSubsystem ? EquipmentSubsystem->GetEquippedWeapon(SelectedPartyIndex) : nullptr;
+	if (!Weapon && Def.WeaponOverride)
+	{
+		Weapon = Def.WeaponOverride;
+	}
+	if (!Weapon && UnitDA)
+	{
+		Weapon = UnitDA->DefaultWeapon;
+	}
+	return Weapon;
+}
+
+UArmorDataAsset* UPlayerInfoWindowWidget::ResolveCurrentArmorForUI(const FPlayerInfoEquipmentButtonDef& Def, UUnitDataAsset* UnitDA) const
+{
+	UArmorDataAsset* Armor = EquipmentSubsystem ? EquipmentSubsystem->GetEquippedArmor(SelectedPartyIndex) : nullptr;
+	if (!Armor && Def.ArmorOverride)
+	{
+		Armor = Def.ArmorOverride;
+	}
+	if (!Armor && UnitDA)
+	{
+		Armor = UnitDA->DefaultArmor;
+	}
+	return Armor;
+}
+
 void UPlayerInfoWindowWidget::HandleAlly0Clicked()
 {
 	SelectPartyMember(0);
@@ -159,23 +219,84 @@ void UPlayerInfoWindowWidget::HandleArmorSlotClicked()
 
 void UPlayerInfoWindowWidget::HandleEquipmentButtonClicked(FName EquipmentKey)
 {
-	if (TryToggleEquipmentPartsWindow(EquipmentKey))
+	OpenEquipmentPartsWindow(EquipmentKey);
+}
+
+bool UPlayerInfoWindowWidget::OpenFirstEquipmentOfKind(EPlayerInfoEquipmentKind Kind)
+{
+	if (UUnitDataAsset* UnitDA = GetPartyUnitData(SelectedPartyIndex))
 	{
-		return;
+		for (const FPlayerInfoEquipmentButtonDef& Def : UnitDA->PlayerInfoEquipButtons)
+		{
+			if (Def.Kind == Kind && !Def.EquipmentKey.IsNone())
+			{
+				return OpenEquipmentPartsWindow(Def.EquipmentKey);
+			}
+		}
+	}
+	return false;
+}
+
+bool UPlayerInfoWindowWidget::OpenEquipmentPartsWindow(FName EquipmentKey)
+{
+	if (!EquipPartsWindow) return false;
+	const FPlayerInfoEquipmentButtonDef* Def = FindEquipmentButtonDef(EquipmentKey);
+	UUnitDataAsset* UnitDA = GetPartyUnitData(SelectedPartyIndex);
+	if (!Def || !UnitDA) return false;
+
+	EnsureSelectedLoadoutInitialized();
+
+	if (Def->Kind == EPlayerInfoEquipmentKind::Weapon)
+	{
+		if (UWeaponDataAsset* Weapon = ResolveCurrentWeaponForUI(*Def, UnitDA))
+		{
+			EquipPartsWindow->OpenForWeapon(SelectedPartyIndex, EquipmentKey, Weapon);
+			PositionEquipPartsWindowNextToButton(EquipmentKey);
+			return true;
+		}
+	}
+	else
+	{
+		if (UArmorDataAsset* Armor = ResolveCurrentArmorForUI(*Def, UnitDA))
+		{
+			EquipPartsWindow->OpenForArmor(SelectedPartyIndex, EquipmentKey, Armor);
+			PositionEquipPartsWindowNextToButton(EquipmentKey);
+			return true;
+		}
 	}
 
-	BP_OpenEquipmentPartsSelectionWindow(SelectedPartyIndex, EquipmentKey);
+	return false;
+}
+
+void UPlayerInfoWindowWidget::PositionEquipPartsWindowNextToButton(FName EquipmentKey)
+{
+	if (!EquipPartsWindow) return;
+	if (TObjectPtr<UPlayerInfoEquipButtonWidget>* Found = EquipmentButtonWidgetsByKey.Find(EquipmentKey))
+	{
+		if (!IsValid(*Found)) return;
+		const FGeometry& Geo = (*Found)->GetCachedGeometry();
+		const FVector2D AbsPos = Geo.GetAbsolutePosition();
+		const FVector2D LocalSize = Geo.GetLocalSize();
+		FVector2D PixelPos;
+		FVector2D ViewportPos;
+		USlateBlueprintLibrary::AbsoluteToViewport(GetWorld(), AbsPos, PixelPos, ViewportPos);
+		EquipPartsWindow->SetPositionInViewport(ViewportPos + FVector2D(LocalSize.X + 24.f, 0.f), false);
+	}
 }
 
 void UPlayerInfoWindowWidget::HandleEquipmentChanged(int32 PartyIndex)
 {
 	if (PartyIndex != SelectedPartyIndex) return;
 	RefreshSelectedMemberPanel();
+	if (EquipPartsWindow && EquipPartsWindow->GetVisibility() == ESlateVisibility::Visible)
+	{
+		EquipPartsWindow->Refresh();
+	}
 }
 
 void UPlayerInfoWindowWidget::SelectPartyMember(int32 PartyIndex)
 {
-	HideEquipPartsWindow();
+	ClosePartsWindow();
 
 	const int32 N = GetPartyCount();
 	if (N <= 0)
@@ -274,6 +395,15 @@ void UPlayerInfoWindowWidget::RefreshSelectedMemberPanel()
 	RefreshStatsPanel();
 }
 
+// UPlayerInfoEquipButtonWidget* UPlayerInfoWindowWidget::FindEquipmentButtonWidget(FName EquipmentKey) const
+// {
+// 	if (const TObjectPtr<UPlayerInfoEquipButtonWidget>* Found = EquipButtonsByKey.Find(EquipmentKey))
+// 	{
+// 		return Found->Get();
+// 	}
+// 	return nullptr;
+// }
+
 bool UPlayerInfoWindowWidget::ResolveEquipmentButtonDef(FName EquipmentKey, FPlayerInfoEquipmentButtonDef& OutDef) const
 {
 	if (UUnitDataAsset* UnitDA = GetPartyUnitData(SelectedPartyIndex))
@@ -291,56 +421,56 @@ bool UPlayerInfoWindowWidget::ResolveEquipmentButtonDef(FName EquipmentKey, FPla
 	return false;
 }
 
-FVector2D UPlayerInfoWindowWidget::GetEquipButtonWindowPosition(FName EquipmentKey) const
-{
-	if (const TObjectPtr<UPlayerInfoEquipButtonWidget>* Found = EquipButtonsByKey.Find(EquipmentKey))
-	{
-		if (UPlayerInfoEquipButtonWidget* ButtonWidget = Found->Get())
-		{
-			const FGeometry Geometry = ButtonWidget->GetCachedGeometry();
-			FVector2D PixelPosition;
-			FVector2D ViewportPosition;
-			USlateBlueprintLibrary::LocalToViewport(this, Geometry, FVector2D(Geometry.GetLocalSize().X, 0.f), PixelPosition, ViewportPosition);
-			return ViewportPosition + FVector2D(12.f, 0.f);
-		}
-	}
+// FVector2D UPlayerInfoWindowWidget::GetEquipButtonWindowPosition(FName EquipmentKey) const
+// {
+// 	if (const TObjectPtr<UPlayerInfoEquipButtonWidget>* Found = EquipButtonsByKey.Find(EquipmentKey))
+// 	{
+// 		if (UPlayerInfoEquipButtonWidget* ButtonWidget = Found->Get())
+// 		{
+// 			const FGeometry Geometry = ButtonWidget->GetCachedGeometry();
+// 			FVector2D PixelPosition;
+// 			FVector2D ViewportPosition;
+// 			USlateBlueprintLibrary::LocalToViewport(this, Geometry, FVector2D(Geometry.GetLocalSize().X, 0.f), PixelPosition, ViewportPosition);
+// 			return ViewportPosition + FVector2D(12.f, 0.f);
+// 		}
+// 	}
+//
+// 	return FVector2D(64.f, 64.f);
+// }
 
-	return FVector2D(64.f, 64.f);
-}
-
-bool UPlayerInfoWindowWidget::TryToggleEquipmentPartsWindow(FName EquipmentKey)
-{
-	FPlayerInfoEquipmentButtonDef ButtonDef;
-	if (!ResolveEquipmentButtonDef(EquipmentKey, ButtonDef))
-	{
-		return false;
-	}
-
-	if (!EquipPartsWindow)
-	{
-		return false;
-	}
-
-	if (EquipPartsWindow->IsOpenFor(SelectedPartyIndex, EquipmentKey))
-	{
-		HideEquipPartsWindow();
-		return true;
-	}
-
-	if (EquipPartsWindow->OpenForEquipment(SelectedPartyIndex, EquipmentKey))
-	{
-		EquipPartsWindow->SetWindowScreenPosition(GetEquipButtonWindowPosition(EquipmentKey));
-		return true;
-	}
-
-	return false;
-}
+// bool UPlayerInfoWindowWidget::TryToggleEquipmentPartsWindow(FName EquipmentKey)
+// {
+// 	FPlayerInfoEquipmentButtonDef ButtonDef;
+// 	if (!ResolveEquipmentButtonDef(EquipmentKey, ButtonDef))
+// 	{
+// 		return false;
+// 	}
+//
+// 	if (!EquipPartsWindow)
+// 	{
+// 		return false;
+// 	}
+//
+// 	if (EquipPartsWindow->IsOpenFor(SelectedPartyIndex, EquipmentKey))
+// 	{
+// 		HideEquipPartsWindow();
+// 		return true;
+// 	}
+//
+// 	if (EquipPartsWindow->OpenForEquipment(SelectedPartyIndex, EquipmentKey))
+// 	{
+// 		EquipPartsWindow->SetWindowScreenPosition(GetEquipButtonWindowPosition(EquipmentKey));
+// 		return true;
+// 	}
+//
+// 	return false;
+// }
 
 void UPlayerInfoWindowWidget::HideEquipPartsWindow()
 {
 	if (EquipPartsWindow)
 	{
-		EquipPartsWindow->CloseWindow();
+		EquipPartsWindow->Close();
 	}
 }
 
@@ -349,106 +479,185 @@ void UPlayerInfoWindowWidget::RebuildEquipmentButtons()
 	if (!Canvas_EquipButtons) return;
 
 	Canvas_EquipButtons->ClearChildren();
-	EquipButtonsByKey.Empty();
+	EquipmentButtonDefsByKey.Empty();
+	EquipmentButtonWidgetsByKey.Empty();
 
 	UUnitDataAsset* UnitDA = GetPartyUnitData(SelectedPartyIndex);
-	if (!UnitDA) return;
-	if (!EquipButtonWidgetClass) return;
+	if (!UnitDA || !EquipButtonWidgetClass) return;
 
 	for (const FPlayerInfoEquipmentButtonDef& Def : UnitDA->PlayerInfoEquipButtons)
 	{
 		if (Def.EquipmentKey.IsNone()) continue;
 
-		UPlayerInfoEquipButtonWidget* W = CreateWidget<UPlayerInfoEquipButtonWidget>(GetOwningPlayer(), EquipButtonWidgetClass);
-		if (!W) continue;
+		EquipmentButtonDefsByKey.Add(Def.EquipmentKey, Def);
+
+		UPlayerInfoEquipButtonWidget* ButtonWidget = CreateWidget<UPlayerInfoEquipButtonWidget>(GetOwningPlayer(), EquipButtonWidgetClass);
+		if (!ButtonWidget) continue;
 
 		UTexture2D* Icon = Def.IconOverride;
-		if (!Icon && Def.Kind == EPlayerInfoEquipmentKind::Weapon)
+		if (!Icon)
 		{
-			UWeaponDataAsset* Weapon = nullptr;
-			if (EquipmentSubsystem)
+			if (Def.Kind == EPlayerInfoEquipmentKind::Weapon)
 			{
-				Weapon = EquipmentSubsystem->GetEquippedWeapon(SelectedPartyIndex);
+				if (UWeaponDataAsset* Weapon = ResolveCurrentWeaponForUI(Def, UnitDA))
+				{
+					Icon = Weapon->Icon;
+				}
 			}
-			if (!Weapon && Def.WeaponOverride)
+			else
 			{
-				Weapon = Def.WeaponOverride;
-			}
-			if (!Weapon)
-			{
-				Weapon = UnitDA->DefaultWeapon;
-			}
-			if (Weapon)
-			{
-				Icon = Weapon->Icon;
+				if (UArmorDataAsset* Armor = ResolveCurrentArmorForUI(Def, UnitDA))
+				{
+					Icon = Armor->Icon;
+				}
 			}
 		}
 
-		W->Init(Def.EquipmentKey, Icon);
-		W->OnClicked.RemoveDynamic(this, &UPlayerInfoWindowWidget::HandleEquipmentButtonClicked);
-		W->OnClicked.AddDynamic(this, &UPlayerInfoWindowWidget::HandleEquipmentButtonClicked);
+		ButtonWidget->Init(Def.EquipmentKey, Icon);
+		ButtonWidget->OnClicked.RemoveDynamic(this, &UPlayerInfoWindowWidget::HandleEquipmentButtonClicked);
+		ButtonWidget->OnClicked.AddDynamic(this, &UPlayerInfoWindowWidget::HandleEquipmentButtonClicked);
+		EquipmentButtonWidgetsByKey.Add(Def.EquipmentKey, ButtonWidget);
 
-		UCanvasPanelSlot* CanvasSlot = Canvas_EquipButtons->AddChildToCanvas(W);
-		CanvasSlot->SetAutoSize(false);
-		CanvasSlot->SetAnchors(FAnchors(Def.UIAnchor.X, Def.UIAnchor.Y, Def.UIAnchor.X, Def.UIAnchor.Y));
-		CanvasSlot->SetAlignment(FVector2D(0.5f, 0.5f));
-		CanvasSlot->SetPosition(Def.UIPixelOffset);
-		CanvasSlot->SetSize(Def.UISize);
+		if (UCanvasPanelSlot* CanvasSlot = Canvas_EquipButtons->AddChildToCanvas(ButtonWidget))
+		{
+			CanvasSlot->SetAutoSize(false);
+			CanvasSlot->SetAnchors(FAnchors(Def.UIAnchor.X, Def.UIAnchor.Y, Def.UIAnchor.X, Def.UIAnchor.Y));
+			CanvasSlot->SetAlignment(FVector2D(0.5f, 0.5f));
+			CanvasSlot->SetPosition(Def.UIPixelOffset);
+			CanvasSlot->SetSize(Def.UISize);
+		}
+	}
 
-		EquipButtonsByKey.FindOrAdd(Def.EquipmentKey) = W;
+}
+
+// void UPlayerInfoWindowWidget::OpenPartsWindowForEquipment(FName EquipmentKey)
+// {
+// 	if (EquipmentKey.IsNone() || !EquipPartsWindowClass || !GetOwningPlayer())
+// 	{
+// 		return;
+// 	}
+//
+// 	if (!EquipPartsWindow)
+// 	{
+// 		EquipPartsWindow = CreateWidget<UEquipPartsWindowWidget>(GetOwningPlayer(), EquipPartsWindowClass);
+// 		if (EquipPartsWindow)
+// 		{
+// 			EquipPartsWindow->AddToViewport(45);
+// 			EquipPartsWindow->SetVisibility(ESlateVisibility::Collapsed);
+// 		}
+// 	}
+//
+// 	if (!EquipPartsWindow)
+// 	{
+// 		return;
+// 	}
+//
+// 	if (EquipPartsWindow->GetVisibility() == ESlateVisibility::Visible &&
+// 		EquipPartsWindow->GetCurrentPartyIndex() == SelectedPartyIndex &&
+// 		EquipPartsWindow->GetCurrentEquipmentKey() == EquipmentKey)
+// 	{
+// 		ClosePartsWindow();
+// 		return;
+// 	}
+//
+// 	FVector2D WindowPos(100.f, 100.f);
+// 	if (UPlayerInfoEquipButtonWidget* ButtonWidget = FindEquipmentButtonWidget(EquipmentKey))
+// 	{
+// 		const FGeometry Geometry = ButtonWidget->GetCachedGeometry();
+// 		FVector2D PixelPosition, ViewportPosition;
+// 		USlateBlueprintLibrary::LocalToViewport(GetWorld(), Geometry, FVector2D::ZeroVector, PixelPosition, ViewportPosition);
+// 		WindowPos = ViewportPosition + FVector2D(Geometry.GetLocalSize().X + 16.f, 0.f);
+// 	}
+//
+// 	EquipPartsWindow->SetAlignmentInViewport(FVector2D::ZeroVector);
+// 	EquipPartsWindow->SetPositionInViewport(WindowPos, false);
+// 	EquipPartsWindow->OpenForEquipment(SelectedPartyIndex, EquipmentKey);
+// }
+
+void UPlayerInfoWindowWidget::ClosePartsWindow()
+{
+	if (EquipPartsWindow)
+	{
+		EquipPartsWindow->Close();
 	}
 }
+
+// bool UPlayerInfoWindowWidget::FindEquipmentButtonDef(FName EquipmentKey, FPlayerInfoEquipmentButtonDef& OutDef) const
+// {
+// 	UUnitDataAsset* UnitDA = GetPartyUnitData(SelectedPartyIndex);
+// 	if (!UnitDA)
+// 	{
+// 		return false;
+// 	}
+//
+// 	for (const FPlayerInfoEquipmentButtonDef& Def : UnitDA->PlayerInfoEquipButtons)
+// 	{
+// 		if (Def.EquipmentKey == EquipmentKey)
+// 		{
+// 			OutDef = Def;
+// 			return true;
+// 		}
+// 	}
+//
+// 	return false;
+// }
 
 void UPlayerInfoWindowWidget::RefreshStatsPanel()
 {
 	UUnitDataAsset* UnitDA = GetPartyUnitData(SelectedPartyIndex);
+	const FUnitBaseStats BaseStats = UnitDA ? UnitDA->BaseStats : FUnitBaseStats();
 
-	const float MaxHP = UnitDA ? UnitDA->BaseStats.MaxHP : 0.f;
-	const float SPD = UnitDA ? UnitDA->BaseStats.Speed : 0.f;
-	const float ATK = UnitDA ? UnitDA->BaseStats.AttackPower : 0.f;
+	FUnitBaseStats FinalStats = BaseStats;
+	if (EquipmentSubsystem && UnitDA)
+	{
+		EquipmentSubsystem->InitializeUnitLoadoutIfMissing(SelectedPartyIndex, UnitDA);
+		FinalStats = EquipmentSubsystem->ResolveFinalStats(SelectedPartyIndex, BaseStats);
+	}
 
-	float CurHP = MaxHP;
+	float CurHP = FinalStats.MaxHP;
 	int32 CurSP = UnitDA ? UnitDA->BaseSkillPoints : 0;
-
 	if (TransferSubsystem)
 	{
 		const float SavedHP = TransferSubsystem->GetSavedHP(SelectedPartyIndex);
-		if (SavedHP >= 0.f) CurHP = SavedHP;
-
+		if (SavedHP >= 0.f)
+		{
+			CurHP = FMath::Clamp(SavedHP, 0.f, FinalStats.MaxHP);
+		}
 		const int32 SavedSP = TransferSubsystem->GetSavedSP(SelectedPartyIndex);
-		if (SavedSP >= 0) CurSP = SavedSP;
+		if (SavedSP >= 0)
+		{
+			CurSP = SavedSP;
+		}
 	}
 
-	if (Text_HP) Text_HP->SetText(FText::FromString(FString::Printf(TEXT("HP %.0f / %.0f"), CurHP, MaxHP)));
+	if (Text_HP) Text_HP->SetText(FText::FromString(FString::Printf(TEXT("HP %.0f / %.0f"), CurHP, FinalStats.MaxHP)));
 	if (Text_SP) Text_SP->SetText(FText::FromString(FString::Printf(TEXT("SP %d"), CurSP)));
-	if (Text_ATK) Text_ATK->SetText(FText::FromString(FString::Printf(TEXT("ATK %.0f"), ATK)));
-	if (Text_SPD) Text_SPD->SetText(FText::FromString(FString::Printf(TEXT("SPD %.0f"), SPD)));
+	if (Text_ATK) Text_ATK->SetText(FText::FromString(FString::Printf(TEXT("ATK %.0f"), FinalStats.AttackPower)));
+	if (Text_SPD) Text_SPD->SetText(FText::FromString(FString::Printf(TEXT("SPD %.0f"), FinalStats.Speed)));
 
 	if (EquipmentSubsystem)
 	{
-		const FWeaponPartEffect E = EquipmentSubsystem->GetTotalWeaponPartEffect(SelectedPartyIndex);
-
+		const FWeaponPartEffect Effect = EquipmentSubsystem->GetTotalEquippedPartEffect(SelectedPartyIndex);
 		if (Text_Effects)
 		{
 			TArray<FString> Lines;
-			if (E.BonusProjectileCount != 0) Lines.Add(FString::Printf(TEXT("Proj %+d"), E.BonusProjectileCount));
-			if (E.BonusHitCount != 0) Lines.Add(FString::Printf(TEXT("Hit %+d"), E.BonusHitCount));
-			if (!FMath::IsNearlyZero(E.DamageMulAdd)) Lines.Add(FString::Printf(TEXT("DmgAdd %+0.2f"), E.DamageMulAdd));
-			if (!FMath::IsNearlyEqual(E.DamageMulMul, 1.f)) Lines.Add(FString::Printf(TEXT("DmgMul x%0.2f"), E.DamageMulMul));
+			if (Effect.BonusProjectileCount != 0) Lines.Add(FString::Printf(TEXT("Proj %+d"), Effect.BonusProjectileCount));
+			if (Effect.BonusHitCount != 0) Lines.Add(FString::Printf(TEXT("Hit %+d"), Effect.BonusHitCount));
+			if (!FMath::IsNearlyZero(Effect.DamageMulAdd)) Lines.Add(FString::Printf(TEXT("DmgAdd %+0.2f"), Effect.DamageMulAdd));
+			if (!FMath::IsNearlyEqual(Effect.DamageMulMul, 1.f)) Lines.Add(FString::Printf(TEXT("DmgMul x%0.2f"), Effect.DamageMulMul));
 			if (Lines.Num() == 0) Lines.Add(TEXT("Effects: None"));
-
 			Text_Effects->SetText(FText::FromString(FString::Join(Lines, TEXT("\n"))));
 		}
-
-		if (Text_Proj) Text_Proj->SetText(FText::FromString(FString::Printf(TEXT("Proj %+d"), E.BonusProjectileCount)));
-		if (Text_Hit) Text_Hit->SetText(FText::FromString(FString::Printf(TEXT("Hit %+d"), E.BonusHitCount)));
-		if (Text_DmgMul) Text_DmgMul->SetText(FText::FromString(FString::Printf(TEXT("DmgAdd %+0.2f / x%.2f"), E.DamageMulAdd, E.DamageMulMul)));
+		const float FinalDmgMul = (1.f + Effect.DamageMulAdd) * Effect.DamageMulMul;
+		if (Text_Proj) Text_Proj->SetText(FText::FromString(FString::Printf(TEXT("Proj %+d"), Effect.BonusProjectileCount)));
+		if (Text_Hit) Text_Hit->SetText(FText::FromString(FString::Printf(TEXT("Hit %+d"), Effect.BonusHitCount)));
+		if (Text_DmgMul) Text_DmgMul->SetText(FText::FromString(FString::Printf(TEXT("DmgMul x%.2f"), FinalDmgMul)));
 	}
 	else
 	{
 		if (Text_Effects) Text_Effects->SetText(FText::FromString(TEXT("Effects: None")));
 		if (Text_Proj) Text_Proj->SetText(FText::FromString(TEXT("Proj +0")));
 		if (Text_Hit) Text_Hit->SetText(FText::FromString(TEXT("Hit +0")));
-		if (Text_DmgMul) Text_DmgMul->SetText(FText::FromString(TEXT("DmgAdd +0.00 / x1.00")));
+		if (Text_DmgMul) Text_DmgMul->SetText(FText::FromString(TEXT("DmgMul x1.00")));
 	}
 }

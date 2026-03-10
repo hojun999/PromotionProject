@@ -2,10 +2,11 @@
 
 
 #include "WorldHUD.h"
-#include "InventoryWindowWidget.h"
 #include "LootCorpseActor.h"
 #include "LootWindowWidget.h"
+#include "InventoryWindowWidget.h"
 #include "PlayerInfoWindowWidget.h"
+#include "Blueprint/UserWidget.h"
 
 void AWorldHUD::BeginPlay()
 {
@@ -73,8 +74,24 @@ void AWorldHUD::ApplyInputMode_GameAndUI(UUserWidget* FocusWidget)
 void AWorldHUD::HideAllPanels()
 {
 	if (LootWindow) LootWindow->SetVisibility(ESlateVisibility::Collapsed);
-	if (InventoryWindow) InventoryWindow->SetVisibility(ESlateVisibility::Collapsed);
-	if (PlayerInfoWindow) PlayerInfoWindow->SetVisibility(ESlateVisibility::Collapsed);
+	
+	if (UInventoryWindowWidget* IW = Cast<UInventoryWindowWidget>(InventoryWindow))
+	{
+		IW->Close();
+	}
+	else if (InventoryWindow)
+	{
+		InventoryWindow->SetVisibility(ESlateVisibility::Collapsed);
+	}
+
+	if (UPlayerInfoWindowWidget* PIW = Cast<UPlayerInfoWindowWidget>(PlayerInfoWindow))
+	{
+		PIW->Close();
+	}
+	else if (PlayerInfoWindow)
+	{
+		PlayerInfoWindow->SetVisibility(ESlateVisibility::Collapsed);
+	}
 }
 
 void AWorldHUD::ShowLootWindow(ALootCorpseActor* Corpse)
@@ -108,14 +125,27 @@ void AWorldHUD::ToggleInventory()
 	
 	if (bOpen)
 	{
-		//HideAllPanels();
-		InventoryWindow->SetVisibility(ESlateVisibility::Visible);
+		if (UInventoryWindowWidget* IW = Cast<UInventoryWindowWidget>(InventoryWindow))
+		{
+			IW->Open();
+		}
+		else
+		{
+			InventoryWindow->SetVisibility(ESlateVisibility::Visible);
+		}
 		ApplyInputMode_GameAndUI(InventoryWindow);
 		SetWorldInputBlocked(true);
 	}
 	else
 	{
-		InventoryWindow->SetVisibility((ESlateVisibility::Collapsed));
+		if (UInventoryWindowWidget* IW = Cast<UInventoryWindowWidget>(InventoryWindow))
+		{
+			IW->Close();
+		}
+		else
+		{
+			InventoryWindow->SetVisibility(ESlateVisibility::Collapsed);
+		}
 		ApplyInputMode_GameOnly();
 		SetWorldInputBlocked(false);
 	}
@@ -137,7 +167,7 @@ void AWorldHUD::TogglePlayerInfo()
 
 	const bool bOpen = (PlayerInfoWindow->GetVisibility() != ESlateVisibility::Visible);
 	HideAllPanels();
-	
+
 	if (bOpen)
 	{
 		if (UPlayerInfoWindowWidget* PIW = Cast<UPlayerInfoWindowWidget>(PlayerInfoWindow))
@@ -186,7 +216,14 @@ bool AWorldHUD::CloseAnyOpenPanel()
 	
 	if (InventoryWindow && InventoryWindow->GetVisibility() == ESlateVisibility::Visible)
 	{
-		InventoryWindow->SetVisibility(ESlateVisibility::Collapsed);
+		if (UInventoryWindowWidget* IW = Cast<UInventoryWindowWidget>(InventoryWindow))
+		{
+			IW->Close();
+		}
+		else
+		{
+			InventoryWindow->SetVisibility(ESlateVisibility::Collapsed);
+		}
 		ApplyInputMode_GameOnly();
 		SetWorldInputBlocked(false);
 		return true;

@@ -19,21 +19,19 @@ AWorldBaseUnit::AWorldBaseUnit()
 	{
 		MoveComp->bOrientRotationToMovement = true;
 		MoveComp->RotationRate = FRotator(0.0f, 360.0f, 0.0f);
-		MoveComp->MaxWalkSpeed = 300.f;
+		MoveComp->MaxWalkSpeed = 250.f;
 	}
 	
 	// 컨트롤러 회전 영향 제거
 	bUseControllerRotationYaw = false;
 	
-	// ACharacter 기본 메시 정렬은 BP에서 조정하는게 가장 편하다고 함
-	// 근데 내 구조에서 BP에서 조정하는게 가능한가?
-
 	// 무기/파츠 비주얼용 컴포넌트
 	WeaponMeshComp = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("WeaponMeshComp"));
 	WeaponMeshComp->SetupAttachment(GetMesh());
 	WeaponMeshComp->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 	WeaponMeshComp->SetGenerateOverlapEvents(false);
-	WeaponMeshComp->SetHiddenInGame(true);
+	WeaponMeshComp->SetVisibility(true, true);
+	WeaponMeshComp->SetHiddenInGame(true, true);
 }
 
 void AWorldBaseUnit::BeginPlay()
@@ -50,6 +48,7 @@ void AWorldBaseUnit::BeginPlay()
 		if (UEquipmentSubsystem* EquipSub = GI->GetSubsystem<UEquipmentSubsystem>())
 		{
 			EquipSub->EnsurePartySize(PartyIndex + 1);
+			EquipSub->InitializeUnitLoadoutIfMissing(PartyIndex, UnitData);
 			EquipSub->OnEquipmentChanged.RemoveDynamic(this, &AWorldBaseUnit::HandleEquipmentChanged);
 			EquipSub->OnEquipmentChanged.AddDynamic(this, &AWorldBaseUnit::HandleEquipmentChanged);
 		}
@@ -85,12 +84,13 @@ void AWorldBaseUnit::RefreshEquipmentVisuals()
 	if (PartyIndex == INDEX_NONE)
 	{
 		WeaponMeshComp->SetStaticMesh(nullptr);
-		WeaponMeshComp->SetHiddenInGame(true);
-		for (auto& KVP : PartMeshBySocket)
+		WeaponMeshComp->SetVisibility(false, true);
+		WeaponMeshComp->SetHiddenInGame(true, true);
+		for (auto& Pair : PartMeshBySocket)
 		{
-			if (KVP.Value)
+			if (Pair.Value)
 			{
-				KVP.Value->DestroyComponent();
+				Pair.Value->DestroyComponent();
 			}
 		}
 		PartMeshBySocket.Empty();
@@ -101,6 +101,7 @@ void AWorldBaseUnit::RefreshEquipmentVisuals()
 	UEquipmentSubsystem* EquipSub = GI ? GI->GetSubsystem<UEquipmentSubsystem>() : nullptr;
 	if (!EquipSub) return;
 
+	EquipSub->InitializeUnitLoadoutIfMissing(PartyIndex, UnitData);
 	UWeaponDataAsset* WeaponDA = EquipSub->GetEquippedWeapon(PartyIndex);
 	if (!WeaponDA && UnitData)
 	{
@@ -110,23 +111,21 @@ void AWorldBaseUnit::RefreshEquipmentVisuals()
 	if (WeaponDA && WeaponDA->WeaponMesh)
 	{
 		WeaponMeshComp->SetStaticMesh(WeaponDA->WeaponMesh);
-		WeaponMeshComp->SetHiddenInGame(false);
+		WeaponMeshComp->SetVisibility(true, true);
+		WeaponMeshComp->SetHiddenInGame(false, true);
 	}
 	else
 	{
 		WeaponMeshComp->SetStaticMesh(nullptr);
-		WeaponMeshComp->SetHiddenInGame(true);
+		WeaponMeshComp->SetVisibility(false, true);
+		WeaponMeshComp->SetHiddenInGame(true, true);
 	}
 
 	if (USkeletalMeshComponent* Skel = GetMesh())
 	{
-		const FName AttachSocket = (WeaponHoldSocketName != NAME_None)
-			? WeaponHoldSocketName
-			: (UnitData ? UnitData->WeaponAttachSocketName : NAME_None);
-
-		if (AttachSocket != NAME_None && Skel->DoesSocketExist(AttachSocket))
+		if (WeaponHoldSocketName != NAME_None && Skel->DoesSocketExist(WeaponHoldSocketName))
 		{
-			WeaponMeshComp->AttachToComponent(Skel, FAttachmentTransformRules::SnapToTargetIncludingScale, AttachSocket);
+			WeaponMeshComp->AttachToComponent(Skel, FAttachmentTransformRules::KeepRelativeTransform, WeaponHoldSocketName);
 		}
 		else
 		{
@@ -235,4 +234,6 @@ void AWorldBaseUnit::InitFromUnitData(UUnitDataAsset* InUnitData)
 		*GetName(),
 		*GetNameSafe(UnitData->WorldSkeletalMesh),
 		*GetNameSafe(UnitData->WorldAnimBlueprintClass));
+	
+	RefreshEquipmentVisuals();
 }

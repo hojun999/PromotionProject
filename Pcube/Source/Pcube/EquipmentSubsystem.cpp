@@ -1,5 +1,16 @@
 #include "EquipmentSubsystem.h"
 #include "InventorySubsystem.h"
+#include "UnitDataAsset.h"
+
+namespace
+{
+	static void AccumulateStatBonus(FEquipmentStatBonus& OutBonus, const FEquipmentStatBonus& InBonus)
+	{
+		OutBonus.MaxHP += InBonus.MaxHP;
+		OutBonus.Speed += InBonus.Speed;
+		OutBonus.AttackPower += InBonus.AttackPower;
+	}
+}
 
 UInventorySubsystem* UEquipmentSubsystem::GetInv() const
 {
@@ -12,159 +23,218 @@ UInventorySubsystem* UEquipmentSubsystem::GetInv() const
 
 bool UEquipmentSubsystem::IsValidParty(int32 PartyIndex) const
 {
-	return PartyWeapons.IsValidIndex(PartyIndex);
+	return PartyEquipments.IsValidIndex(PartyIndex);
 }
 
 void UEquipmentSubsystem::EnsurePartySize(int32 NumPartyMembers)
 {
 	if (NumPartyMembers <= 0) return;
-	if (PartyWeapons.Num() < NumPartyMembers)
+	if (PartyEquipments.Num() < NumPartyMembers)
 	{
-		PartyWeapons.SetNum(NumPartyMembers);
+		PartyEquipments.SetNum(NumPartyMembers);
 	}
 }
 
-const FWeaponModSlotDef* UEquipmentSubsystem::FindSlotDef(UWeaponDataAsset* Weapon, FName SlotSocketName) const
+void UEquipmentSubsystem::InitializeUnitLoadoutIfMissing(int32 PartyIndex, UUnitDataAsset* UnitData)
 {
-	if (!Weapon || SlotSocketName == NAME_None) return nullptr;
-	for (const FWeaponModSlotDef& Def : Weapon->ModSlots)
+	if (!UnitData || PartyIndex < 0) return;
+
+	EnsurePartySize(PartyIndex + 1);
+	if (!IsValidParty(PartyIndex)) return;
+
+	FUnitEquipmentState& State = PartyEquipments[PartyIndex];
+
+	if (!State.Weapon && UnitData->DefaultWeapon)
 	{
-		if (Def.SocketName == SlotSocketName)
-		{
-			return &Def;
-		}
-	}
-	return nullptr;
-}
-
-bool UEquipmentSubsystem::IsPartCompatibleWithWeapon(UWeaponDataAsset* Weapon, FName SlotSocketName, const UWeaponPartDataAsset* Part) const
-{
-	if (!Weapon || !Part || SlotSocketName == NAME_None) return false;
-
-	const FWeaponModSlotDef* SlotDef = FindSlotDef(Weapon, SlotSocketName);
-	if (!SlotDef) return false;
-
-	if (Part->SlotType != SlotDef->SlotType) return false;
-
-	if (Part->AttachmentSocketName != NAME_None && Part->AttachmentSocketName != SlotDef->SocketName)
-	{
-		return false;
+		State.Weapon = UnitData->DefaultWeapon;
 	}
 
-	return true;
-}
-
-bool UEquipmentSubsystem::CanEquipWeaponPart(int32 PartyIndex, FName SlotSocketName, UWeaponPartDataAsset* Part) const
-{
-	if (!IsValidParty(PartyIndex) || !Part) return false;
-	return IsPartCompatibleWithWeapon(PartyWeapons[PartyIndex].Weapon, SlotSocketName, Part);
+	if (!State.Armor && UnitData->DefaultArmor)
+	{
+		State.Armor = UnitData->DefaultArmor;
+	}
 }
 
 bool UEquipmentSubsystem::EquipWeapon(int32 PartyIndex, UWeaponDataAsset* NewWeapon)
 {
 	if (!IsValidParty(PartyIndex) || !NewWeapon) return false;
 
-	UInventorySubsystem* Inv = GetInv();
-	if (!Inv) return false;
-
-	if (PartyWeapons[PartyIndex].Weapon == NewWeapon)
+	FUnitEquipmentState& State = PartyEquipments[PartyIndex];
+	if (State.Weapon == NewWeapon)
 	{
 		return true;
 	}
 
-	// 기존 장착 파츠 전부 반환
-	for (auto& KVP : PartyWeapons[PartyIndex].EquippedParts)
+	UInventorySubsystem* Inv = GetInv();
+	if (!Inv) return false;
+
+	for (auto& Pair : State.EquippedParts)
 	{
-		if (KVP.Value)
+		if (Pair.Value)
 		{
-			Inv->AddItem(KVP.Value, 1);
+			Inv->AddItem(Pair.Value, 1);
 		}
 	}
-	PartyWeapons[PartyIndex].EquippedParts.Empty();
+	State.EquippedParts.Empty();
+	State.Weapon = NewWeapon;
 
-	PartyWeapons[PartyIndex].Weapon = NewWeapon;
 	OnEquipmentChanged.Broadcast(PartyIndex);
 	return true;
 }
 
 UWeaponDataAsset* UEquipmentSubsystem::GetEquippedWeapon(int32 PartyIndex) const
 {
-	return IsValidParty(PartyIndex) ? PartyWeapons[PartyIndex].Weapon : nullptr;
+	return IsValidParty(PartyIndex) ? PartyEquipments[PartyIndex].Weapon : nullptr;
 }
 
-UWeaponPartDataAsset* UEquipmentSubsystem::GetEquippedPart(int32 PartyIndex, FName SlotSocketName) const
+UArmorDataAsset* UEquipmentSubsystem::GetEquippedArmor(int32 PartyIndex) const
 {
-	if (!IsValidParty(PartyIndex)) return nullptr;
-	if (const TObjectPtr<UWeaponPartDataAsset>* Found = PartyWeapons[PartyIndex].EquippedParts.Find(SlotSocketName))
+	return IsValidParty(PartyIndex) ? PartyEquipments[PartyIndex].Armor : nullptr;
+}
+
+UWeaponPartDataAsset* UEquipmentSubsystem::GetEquippedPart(int32 PartyIndex, FName PartSlotKey) const
+{
+	if (!IsValidParty(PartyIndex) || PartSlotKey == NAME_None) return nullptr;
+	if (const TObjectPtr<UWeaponPartDataAsset>* Found = PartyEquipments[PartyIndex].EquippedParts.Find(PartSlotKey))
 	{
 		return Found->Get();
 	}
 	return nullptr;
 }
 
-bool UEquipmentSubsystem::EquipWeaponPart(int32 PartyIndex, FName SlotSocketName, UWeaponPartDataAsset* NewPart)
+bool UEquipmentSubsystem::CanEquipWeaponPart(int32 PartyIndex, FName PartSlotKey, UWeaponPartDataAsset* NewPart) const
 {
-	if (!IsValidParty(PartyIndex) || !NewPart || SlotSocketName == NAME_None) return false;
-
-	UInventorySubsystem* Inv = GetInv();
-	if (!Inv) return false;
-
-	UWeaponDataAsset* Weapon = PartyWeapons[PartyIndex].Weapon;
-	if (!IsPartCompatibleWithWeapon(Weapon, SlotSocketName, NewPart)) return false;
-
-	UWeaponPartDataAsset* Old = GetEquippedPart(PartyIndex, SlotSocketName);
-	if (Old == NewPart) return true;
-
-	// 인벤에 없으면 장착 불가
-	if (Inv->GetQuantity(NewPart) <= 0) return false;
-
-	// 새 파츠 소비
-	if (!Inv->RemoveItem(NewPart, 1)) return false;
-
-	// 기존 파츠 반환
-	if (Old)
+	if (!IsValidParty(PartyIndex) || PartSlotKey == NAME_None || !NewPart)
 	{
-		Inv->AddItem(Old, 1);
+		return false;
 	}
 
-	PartyWeapons[PartyIndex].EquippedParts.FindOrAdd(SlotSocketName) = NewPart;
-	OnEquipmentChanged.Broadcast(PartyIndex);
-	return true;
+	if (!NewPart->IsCompatibleWithEquipmentKey(PartSlotKey))
+	{
+		return false;
+	}
+
+	const UInventorySubsystem* Inv = GetInv();
+	return Inv && Inv->GetQuantity(NewPart) > 0;
 }
 
-bool UEquipmentSubsystem::UnequipWeaponPart(int32 PartyIndex, FName SlotSocketName)
+bool UEquipmentSubsystem::EquipWeaponPart(int32 PartyIndex, FName PartSlotKey, UWeaponPartDataAsset* NewPart)
 {
-	if (!IsValidParty(PartyIndex) || SlotSocketName == NAME_None) return false;
+	if (!CanEquipWeaponPart(PartyIndex, PartSlotKey, NewPart))
+	{
+		return false;
+	}
 
 	UInventorySubsystem* Inv = GetInv();
 	if (!Inv) return false;
 
-	UWeaponPartDataAsset* Old = GetEquippedPart(PartyIndex, SlotSocketName);
-	if (!Old) return false;
+	FUnitEquipmentState& State = PartyEquipments[PartyIndex];
+	UWeaponPartDataAsset* OldPart = GetEquippedPart(PartyIndex, PartSlotKey);
+	if (OldPart == NewPart)
+	{
+		return true;
+	}
 
-	Inv->AddItem(Old, 1);
-	PartyWeapons[PartyIndex].EquippedParts.Remove(SlotSocketName);
+	if (!Inv->RemoveItem(NewPart, 1))
+	{
+		return false;
+	}
 
+	if (OldPart)
+	{
+		Inv->AddItem(OldPart, 1);
+	}
+
+	State.EquippedParts.FindOrAdd(PartSlotKey) = NewPart;
 	OnEquipmentChanged.Broadcast(PartyIndex);
 	return true;
 }
 
-FWeaponPartEffect UEquipmentSubsystem::GetTotalWeaponPartEffect(int32 PartyIndex) const
+
+bool UEquipmentSubsystem::UnequipWeaponPart(int32 PartyIndex, FName PartSlotKey)
+{
+	if (!IsValidParty(PartyIndex) || PartSlotKey == NAME_None) return false;
+
+	UInventorySubsystem* Inv = GetInv();
+	if (!Inv) return false;
+
+	UWeaponPartDataAsset* OldPart = GetEquippedPart(PartyIndex, PartSlotKey);
+	if (!OldPart) return false;
+
+	Inv->AddItem(OldPart, 1);
+	PartyEquipments[PartyIndex].EquippedParts.Remove(PartSlotKey);
+	OnEquipmentChanged.Broadcast(PartyIndex);
+	return true;
+}
+
+FWeaponPartEffect UEquipmentSubsystem::GetTotalEquippedPartEffect(int32 PartyIndex) const
 {
 	FWeaponPartEffect Out;
 	Out.DamageMulMul = 1.f;
 
 	if (!IsValidParty(PartyIndex)) return Out;
 
-	for (const auto& KVP : PartyWeapons[PartyIndex].EquippedParts)
+	for (const auto& Pair : PartyEquipments[PartyIndex].EquippedParts)
 	{
-		const UWeaponPartDataAsset* P = KVP.Value;
-		if (!P) continue;
+		const UWeaponPartDataAsset* Part = Pair.Value;
+		if (!Part) continue;
 
-		Out.BonusProjectileCount += P->Effect.BonusProjectileCount;
-		Out.BonusHitCount += P->Effect.BonusHitCount;
-		Out.DamageMulAdd += P->Effect.DamageMulAdd;
-		Out.DamageMulMul *= P->Effect.DamageMulMul;
+		Out.BonusProjectileCount += Part->Effect.BonusProjectileCount;
+		Out.BonusHitCount += Part->Effect.BonusHitCount;
+		Out.DamageMulAdd += Part->Effect.DamageMulAdd;
+		Out.DamageMulMul *= Part->Effect.DamageMulMul;
 	}
+
 	return Out;
 }
+
+FEquipmentStatBonus UEquipmentSubsystem::GetTotalEquipmentBaseStatBonus(int32 PartyIndex) const
+{
+	FEquipmentStatBonus Out;
+
+	if (!IsValidParty(PartyIndex)) return Out;
+
+	const FUnitEquipmentState& State = PartyEquipments[PartyIndex];
+	if (State.Weapon)
+	{
+		AccumulateStatBonus(Out, State.Weapon->BaseStatBonus);
+	}
+	if (State.Armor)
+	{
+		AccumulateStatBonus(Out, State.Armor->BaseStatBonus);
+	}
+
+	return Out;
+}
+
+FUnitBaseStats UEquipmentSubsystem::ResolveFinalStats(int32 PartyIndex, const FUnitBaseStats& BaseStats) const
+{
+	const FEquipmentStatBonus Bonus = GetTotalEquipmentBaseStatBonus(PartyIndex);
+
+	FUnitBaseStats Out = BaseStats;
+	Out.MaxHP = FMath::Max(1.f, BaseStats.MaxHP + Bonus.MaxHP);
+	Out.Speed = FMath::Max(1.f, BaseStats.Speed + Bonus.Speed);
+	Out.AttackPower = FMath::Max(1.f, BaseStats.AttackPower + Bonus.AttackPower);
+	return Out;
+}
+
+
+// FWeaponPartEffect UEquipmentSubsystem::GetTotalWeaponPartEffect(int32 PartyIndex) const
+// {
+// 	FWeaponPartEffect Out;
+// 	Out.DamageMulMul = 1.f;
+//
+// 	if (!IsValidParty(PartyIndex)) return Out;
+//
+// 	for (const auto& KVP : PartyWeapons[PartyIndex].EquippedParts)
+// 	{
+// 		const UWeaponPartDataAsset* P = KVP.Value;
+// 		if (!P) continue;
+//
+// 		Out.BonusProjectileCount += P->Effect.BonusProjectileCount;
+// 		Out.BonusHitCount += P->Effect.BonusHitCount;
+// 		Out.DamageMulAdd += P->Effect.DamageMulAdd;
+// 		Out.DamageMulMul *= P->Effect.DamageMulMul;
+// 	}
+// 	return Out;
+// }

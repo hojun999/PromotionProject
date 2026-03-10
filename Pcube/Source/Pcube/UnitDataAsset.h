@@ -4,29 +4,17 @@
 
 #include "CoreMinimal.h"
 #include "WeaponDataAsset.h"
+#include "ArmorDataAsset.h"
+#include "UnitStatTypes.h"
 #include "Engine/DataAsset.h"
 #include "UnitDataAsset.generated.h"
 
 class ABattleBaseUnit;
 class USkillDataAsset;
 class UWeaponDataAsset;
+class UAnimInstance;
 class UAnimMontage;
 class UParticleSystem;
-
-USTRUCT(BlueprintType)
-struct FUnitBaseStats
-{
-	GENERATED_BODY()
-	
-	UPROPERTY(EditAnywhere, BlueprintReadWrite)
-	float MaxHP = 100.f;
-	
-	UPROPERTY(EditAnywhere, BlueprintReadWrite)
-	float Speed = 100.f;
-	
-	UPROPERTY(EditAnywhere, BlueprintReadWrite)
-	float AttackPower = 10.f;
-};
 
 UENUM(BlueprintType)
 enum class EPlayerInfoEquipmentKind : uint8
@@ -50,6 +38,10 @@ struct FPlayerInfoEquipmentButtonDef
 	// 무기인 경우, 특정 무기를 명시하고 싶을 때 사용 - 없으면 Subsystem 장착 무기 아이콘 사용
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Equipment")
 	TObjectPtr<UWeaponDataAsset> WeaponOverride = nullptr;
+
+	// 방어구인 경우, 특정 방어구를 명시하고 싶을 때 사용 - 없으면 Subsystem 장착 방어구 아이콘 사용
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Equipment")
+	TObjectPtr<UArmorDataAsset> ArmorOverride = nullptr;
 	
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="UI")
 	TObjectPtr<UTexture2D> IconOverride = nullptr;
@@ -119,6 +111,9 @@ public:
 	// --- 장비(고정 장비) ---
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Equipment|Weapon")
 	TObjectPtr<UWeaponDataAsset> DefaultWeapon = nullptr;
+	
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Equipment|Armor")
+	TObjectPtr<UArmorDataAsset> DefaultArmor = nullptr;
 	
 	// 캐릭터 스켈레탈 메시에 추가한 소켓 (예: r_hand_socket에 무기(SM) 부착)
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Equipment|Weapon")

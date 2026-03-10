@@ -90,6 +90,9 @@ public:
 	UFUNCTION()
 	void OnUnitActionComplete();
 
+	UFUNCTION()
+	void OnBattleSetupFinished();
+	
 	// 적 유닛 타겟팅 상태 시작 (공격 또는 스킬 사용에서 호출)
 	void StartTargetSelection(USkillDataAsset* SelectedSkill);
 	

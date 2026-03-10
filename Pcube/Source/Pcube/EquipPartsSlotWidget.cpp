@@ -9,90 +9,23 @@ void UEquipPartsSlotWidget::NativeConstruct()
 {
 	Super::NativeConstruct();
 
-	if (Btn_Select)
+	if (Btn_Root)
 	{
-		Btn_Select->OnClicked.RemoveDynamic(this, &UEquipPartsSlotWidget::HandleSelectClicked);
-		Btn_Select->OnClicked.AddDynamic(this, &UEquipPartsSlotWidget::HandleSelectClicked);
-	}
-
-	if (Btn_Unequip)
-	{
-		Btn_Unequip->OnClicked.RemoveDynamic(this, &UEquipPartsSlotWidget::HandleUnequipClicked);
-		Btn_Unequip->OnClicked.AddDynamic(this, &UEquipPartsSlotWidget::HandleUnequipClicked);
+		Btn_Root->OnClicked.RemoveDynamic(this, &UEquipPartsSlotWidget::HandleClicked);
+		Btn_Root->OnClicked.AddDynamic(this, &UEquipPartsSlotWidget::HandleClicked);
 	}
 }
 
-void UEquipPartsSlotWidget::InitSlot(FName InSlotSocketName, FText InDisplayName)
+void UEquipPartsSlotWidget::Init(UWeaponPartDataAsset* InPart, int32 InQuantity)
 {
-	SlotSocketName = InSlotSocketName;
+	Part = InPart;
+	Quantity = InQuantity;
 
-	if (Text_SlotName)
-	{
-		Text_SlotName->SetText(InDisplayName.IsEmpty() ? FText::FromName(SlotSocketName) : InDisplayName);
-	}
-
-	RefreshVisuals();
-	RefreshTooltip();
-}
-
-void UEquipPartsSlotWidget::SetEquipped(UWeaponPartDataAsset* InEquippedPart)
-{
-	EquippedPart = InEquippedPart;
-	RefreshVisuals();
-	RefreshTooltip();
-}
-
-void UEquipPartsSlotWidget::SetCompatibleParts(const TArray<UWeaponPartDataAsset*>& InCompatibleParts)
-{
-	CompatibleParts.Reset();
-	for (UWeaponPartDataAsset* Part : InCompatibleParts)
-	{
-		if (Part)
-		{
-			CompatibleParts.Add(Part);
-		}
-	}
-
-	RefreshVisuals();
-	RefreshTooltip();
-}
-
-void UEquipPartsSlotWidget::HandleSelectClicked()
-{
-	if (CompatibleParts.Num() <= 0)
-	{
-		return;
-	}
-
-	int32 CurrentIndex = INDEX_NONE;
-	if (EquippedPart)
-	{
-		CurrentIndex = CompatibleParts.IndexOfByKey(EquippedPart);
-	}
-
-	const int32 NextIndex = (CurrentIndex == INDEX_NONE)
-		? 0
-		: ((CurrentIndex + 1) % CompatibleParts.Num());
-
-	if (CompatibleParts.IsValidIndex(NextIndex) && CompatibleParts[NextIndex])
-	{
-		OnEquipRequested.Broadcast(SlotSocketName, CompatibleParts[NextIndex]);
-	}
-}
-
-void UEquipPartsSlotWidget::HandleUnequipClicked()
-{
-	if (!EquippedPart) return;
-	OnUnequipRequested.Broadcast(SlotSocketName);
-}
-
-void UEquipPartsSlotWidget::RefreshVisuals()
-{
 	if (Img_Icon)
 	{
-		if (EquippedPart && EquippedPart->Icon)
+		if (Part && Part->Icon)
 		{
-			Img_Icon->SetBrushFromTexture(EquippedPart->Icon);
+			Img_Icon->SetBrushFromTexture(Part->Icon);
 			Img_Icon->SetVisibility(ESlateVisibility::Visible);
 		}
 		else
@@ -101,47 +34,26 @@ void UEquipPartsSlotWidget::RefreshVisuals()
 		}
 	}
 
-	if (Btn_Unequip)
+	if (Text_Name)
 	{
-		Btn_Unequip->SetVisibility(EquippedPart ? ESlateVisibility::Visible : ESlateVisibility::Collapsed);
+		Text_Name->SetText(Part ? Part->DisplayName : FText::GetEmpty());
 	}
 
-	if (Text_CompatibleCount)
+	if (Text_Count)
 	{
-		Text_CompatibleCount->SetText(FText::FromString(FString::Printf(TEXT("%d"), CompatibleParts.Num())));
+		Text_Count->SetText(FText::FromString(FString::Printf(TEXT("x%d"), FMath::Max(1, Quantity))));
 	}
 
-	if (Btn_Select)
+	if (Btn_Root)
 	{
-		Btn_Select->SetIsEnabled(CompatibleParts.Num() > 0 || EquippedPart != nullptr);
+		Btn_Root->SetIsEnabled(Part != nullptr);
 	}
 }
 
-void UEquipPartsSlotWidget::RefreshTooltip()
+void UEquipPartsSlotWidget::HandleClicked()
 {
-	TArray<FString> Lines;
-	Lines.Add(FString::Printf(TEXT("Slot: %s"), *SlotSocketName.ToString()));
-
-	if (EquippedPart)
+	if (Part)
 	{
-		Lines.Add(FString::Printf(TEXT("Equipped: %s"), *EquippedPart->DisplayName.ToString()));
-		Lines.Add(EquippedPart->BuildEffectText().ToString());
+		OnClicked.Broadcast(Part);
 	}
-	else
-	{
-		Lines.Add(TEXT("Equipped: None"));
-	}
-
-	Lines.Add(FString::Printf(TEXT("Compatible in Inventory: %d"), CompatibleParts.Num()));
-
-	if (CompatibleParts.Num() > 0)
-	{
-		Lines.Add(TEXT("Click slot to cycle compatible parts."));
-	}
-	else
-	{
-		Lines.Add(TEXT("No compatible part in inventory."));
-	}
-
-	SetToolTipText(FText::FromString(FString::Join(Lines, TEXT("\n"))));
 }

@@ -40,6 +40,9 @@ public:
 	void UpdateMenuPosition();
 	void NativeTick(const FGeometry& MyGeometry, float InDeltaTime) override;
 	
+	virtual FReply NativeOnPreviewKeyDown(const FGeometry& InGeometry, const FKeyEvent& InKeyEvent) override;
+	virtual FReply NativeOnMouseButtonDown(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent) override;
+	
 	// ESC 등으로 열린 서브메뉴를 닫고 메인 버튼을 다시 활성화
 	UFUNCTION(BlueprintCallable)
 	bool TryCancelSubMenu(); // 서브메뉴가 열려있으면 닫기 - 취소 입력 처리용
@@ -120,7 +123,6 @@ private:
 	
 	// 메인 버튼 3개를 한 번에 Visible/Collapsed
 	void SetMainButtonsVisibility(ESlateVisibility NewVis);
-	
 	
 	// --- 변수 ---
 	UPROPERTY()

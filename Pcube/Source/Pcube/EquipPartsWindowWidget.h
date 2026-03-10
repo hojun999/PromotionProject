@@ -3,17 +3,20 @@
 #include "CoreMinimal.h"
 #include "Blueprint/UserWidget.h"
 #include "UnitDataAsset.h"
+#include "WeaponDataAsset.h"
 #include "EquipPartsWindowWidget.generated.h"
 
+class UArmorDataAsset;
+class UUniformGridPanel;
+class UCanvasPanel;
 class UButton;
 class UTextBlock;
-class UUniformGridPanel;
+class UImage;
 class UEquipPartsSlotWidget;
+class UEquipSlotWidget;
+class UWeaponPartDataAsset;
 class UEquipmentSubsystem;
 class UInventorySubsystem;
-class UBattleInfoTransferSubsystem;
-class UWeaponDataAsset;
-class UWeaponPartDataAsset;
 
 UCLASS()
 class PCUBE_API UEquipPartsWindowWidget : public UUserWidget
@@ -21,30 +24,75 @@ class PCUBE_API UEquipPartsWindowWidget : public UUserWidget
 	GENERATED_BODY()
 
 public:
-	bool OpenForEquipment(int32 InPartyIndex, FName InEquipmentKey);
-	void CloseWindow();
-	bool IsOpenFor(int32 InPartyIndex, FName InEquipmentKey) const;
-	void SetWindowScreenPosition(FVector2D InViewportPos);
+	UFUNCTION(BlueprintCallable)
+	void OpenForWeapon(int32 InPartyIndex, FName InEquipmentButtonKey, UWeaponDataAsset* InWeapon);
+	
+	UFUNCTION(BlueprintCallable)
+	void OpenForArmor(int32 InPartyIndex, FName InEquipmentButtonKey, UArmorDataAsset* InArmor);
+	
+	// UFUNCTION(BlueprintCallable)
+	// void OpenForEquipment(int32 InPartyIndex, FName InEquipmentKey);
+
+	UFUNCTION(BlueprintCallable)
+	void Close();
+
+	UFUNCTION(BlueprintCallable)
+	void Refresh();
+
+	UFUNCTION(BlueprintPure)
+	int32 GetCurrentPartyIndex() const { return PartyIndex; }
+
+	UFUNCTION(BlueprintPure)
+	FName GetCurrentEquipmentButtonKey() const { return EquipmentButtonKey; }
+	
+	// UFUNCTION(BlueprintPure)
+	// FName GetCurrentEquipmentKey() const { return EquipmentKey; }
 
 protected:
 	virtual void NativeConstruct() override;
 	virtual void NativeDestruct() override;
 
 private:
-	UFUNCTION() void HandleCloseClicked();
-	UFUNCTION() void HandleEquipmentChanged(int32 ChangedPartyIndex);
-	UFUNCTION() void HandleSlotEquipRequested(FName SlotSocketName, UWeaponPartDataAsset* PartToEquip);
-	UFUNCTION() void HandleSlotUnequipRequested(FName SlotSocketName);
+	UFUNCTION()
+	void HandleCloseClicked();
 
-	void RefreshWindow();
-	bool ResolveEquipmentButtonDef(FPlayerInfoEquipmentButtonDef& OutDef) const;
-	UUnitDataAsset* GetPartyUnitData(int32 PartyIndex) const;
-	UWeaponDataAsset* ResolveTargetWeapon(const FPlayerInfoEquipmentButtonDef& Def) const;
-	void GatherCompatibleParts(UWeaponDataAsset* Weapon, FName SlotSocketName, TArray<UWeaponPartDataAsset*>& OutParts) const;
+	UFUNCTION()
+	void HandleInventoryChanged();
+
+	UFUNCTION()
+	void HandleEquipmentChanged(int32 ChangedPartyIndex);
+
+	UFUNCTION()
+	void HandlePartSlotSelected(FName PartSlotKey);
+	
+	// UFUNCTION()
+	// void HandlePartSlotSelected(UWeaponPartDataAsset* Part);
+
+	UFUNCTION()
+	void HandlePartSlotUnequip(FName PartSlotKey);
+	
+	UFUNCTION()
+	void HandlePartCandidateClicked(UWeaponPartDataAsset* Part);
+	
+	void RebuildSlotCanvas();
+	void RebuildCandidateGrid();
+	void ResetActiveEquipment();
+	void AutoSelectFirstSlotIfNeeded();
+	const TArray<FWeaponModSlotDef>* GetActiveSlots() const;
+	UTexture2D* GetActiveIllustration() const;
+	FText GetActiveTitle() const;
+	
+	//void RebuildGrid();
 
 private:
+	UPROPERTY(meta=(BindWidget))
+	UImage* Img_EquipmentIllustration = nullptr;
+
 	UPROPERTY(meta=(BindWidgetOptional))
-	UUniformGridPanel* Grid_Slots = nullptr;
+	UCanvasPanel* Canvas_Slots = nullptr;
+	
+	UPROPERTY(meta=(BindWidget))
+	UUniformGridPanel* Grid_Parts = nullptr;
 
 	UPROPERTY(meta=(BindWidgetOptional))
 	UButton* Btn_Close = nullptr;
@@ -52,9 +100,15 @@ private:
 	UPROPERTY(meta=(BindWidgetOptional))
 	UTextBlock* Text_Title = nullptr;
 
-	UPROPERTY(EditAnywhere, Category="EquipParts|UI")
-	TSubclassOf<UEquipPartsSlotWidget> SlotWidgetClass;
-
+	UPROPERTY(EditAnywhere, Category="UI")
+	TSubclassOf<UEquipSlotWidget> EquipSlotWidgetClass;
+	
+	UPROPERTY(EditAnywhere, Category="UI")
+	TSubclassOf<UEquipPartsSlotWidget> PartCandidateWidgetClass;
+	
+	UPROPERTY(EditAnywhere, Category="UI")
+	FVector2D SlotWidgetSize = FVector2D(56.f, 56.f);
+	
 	UPROPERTY()
 	TObjectPtr<UEquipmentSubsystem> EquipmentSubsystem = nullptr;
 
@@ -62,11 +116,18 @@ private:
 	TObjectPtr<UInventorySubsystem> InventorySubsystem = nullptr;
 
 	UPROPERTY()
-	TObjectPtr<UBattleInfoTransferSubsystem> TransferSubsystem = nullptr;
-
-	int32 OpenPartyIndex = INDEX_NONE;
-	FName OpenEquipmentKey = NAME_None;
+	TObjectPtr<UWeaponDataAsset> ActiveWeapon = nullptr;
 
 	UPROPERTY()
-	TObjectPtr<UWeaponDataAsset> ResolvedWeapon = nullptr;
+	TObjectPtr<UArmorDataAsset> ActiveArmor = nullptr;
+	
+	int32 PartyIndex = INDEX_NONE;
+	FName EquipmentButtonKey = NAME_None;
+	FName SelectedPartSlotKey = NAME_None;
+	//FName EquipmentKey = NAME_None;
+	EPlayerInfoEquipmentKind CurrentEquipmentKind = EPlayerInfoEquipmentKind::Weapon;
+	
+	static constexpr int32 Rows = 2;
+	static constexpr int32 Cols = 2;
+	static constexpr int32 MaxSlots = Rows * Cols;
 };

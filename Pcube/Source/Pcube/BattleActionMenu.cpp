@@ -5,6 +5,8 @@
 
 #include "UnitDataAsset.h"
 #include "Blueprint/WidgetLayoutLibrary.h"
+#include "Input/Reply.h"
+#include "InputCoreTypes.h"
 #include "Components/Button.h"
 #include "Components/VerticalBox.h"
 
@@ -24,12 +26,14 @@ void UBattleActionMenu::NativeConstruct()
 		Btn_Skill->OnClicked.RemoveDynamic(this, &UBattleActionMenu::OnSkillMenuClicked);
 		Btn_Skill->OnClicked.AddDynamic(this, &UBattleActionMenu::OnSkillMenuClicked);
 	}
-	
+
 	if (Btn_Item)
 	{
 		Btn_Item->OnClicked.RemoveDynamic(this, &UBattleActionMenu::OnItemMenuClicked);
 		Btn_Item->OnClicked.AddDynamic(this, &UBattleActionMenu::OnItemMenuClicked);
 	}
+
+	SetIsFocusable(true);
 	
 	if (SkillListWidget)
 	{
@@ -44,6 +48,27 @@ void UBattleActionMenu::NativeConstruct()
 	// 초기 상태: 3버튼 보임, 리스트 숨김
 	CurrentView = EActionMenuView::Main;
 	ApplyView();
+}
+
+
+FReply UBattleActionMenu::NativeOnPreviewKeyDown(const FGeometry& InGeometry, const FKeyEvent& InKeyEvent)
+{
+	if (InKeyEvent.GetKey() == EKeys::Escape && TryCancelSubMenu())
+	{
+		return FReply::Handled();
+	}
+
+	return Super::NativeOnPreviewKeyDown(InGeometry, InKeyEvent);
+}
+
+FReply UBattleActionMenu::NativeOnMouseButtonDown(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent)
+{
+	if (InMouseEvent.GetEffectingButton() == EKeys::RightMouseButton && TryCancelSubMenu())
+	{
+		return FReply::Handled();
+	}
+
+	return Super::NativeOnMouseButtonDown(InGeometry, InMouseEvent);
 }
 
 void UBattleActionMenu::SetMainButtonsVisibility(ESlateVisibility NewVis)
@@ -64,20 +89,27 @@ void UBattleActionMenu::SetMainButtonsVisibility(ESlateVisibility NewVis)
 void UBattleActionMenu::ApplyView()
 {
 	// View 상태에 따라 3버튼과 리스트들의 Visibility를 일괄 갱신
-	SetMainButtonsVisibility(CurrentView == EActionMenuView::Main ? ESlateVisibility::Visible : ESlateVisibility::Collapsed);
+	if (!SkillListWidget || !ItemListWidget) return;
 	
-	if (SkillListWidget)
+	switch (CurrentView)
 	{
-		SkillListWidget->SetVisibility(CurrentView == EActionMenuView::SkillList
-			? ESlateVisibility::Visible
-			: ESlateVisibility::Collapsed);
-	}
-	
-	if (ItemListWidget)
-	{
-		ItemListWidget->SetVisibility(CurrentView == EActionMenuView::ItemList
-			? ESlateVisibility::Visible
-			: ESlateVisibility::Collapsed);
+	case EActionMenuView::Main:
+		SetMainButtonsVisibility(ESlateVisibility::Visible);
+		SkillListWidget->SetVisibility(ESlateVisibility::Collapsed);
+		ItemListWidget->SetVisibility(ESlateVisibility::Collapsed);
+		break;
+
+	case EActionMenuView::SkillList:
+		SetMainButtonsVisibility(ESlateVisibility::Collapsed);
+		SkillListWidget->SetVisibility(ESlateVisibility::Visible);
+		ItemListWidget->SetVisibility(ESlateVisibility::Collapsed);
+		break;
+
+	case EActionMenuView::ItemList:
+		SetMainButtonsVisibility(ESlateVisibility::Collapsed);
+		SkillListWidget->SetVisibility(ESlateVisibility::Collapsed);
+		ItemListWidget->SetVisibility(ESlateVisibility::Visible);
+		break;
 	}
 }
 
@@ -102,6 +134,7 @@ void UBattleActionMenu::ShowMenu(ABattleAllyUnit* TargetUnit)
 	bIsFollowingUnit = true;
 	
 	SetVisibility(ESlateVisibility::Visible);
+	SetKeyboardFocus();
 }
 
 
@@ -221,13 +254,13 @@ void UBattleActionMenu::OnSkillMenuClicked()
 	ApplyView();
 
 	RebuildSkillList();
+	OnSkillMenuRequested.Broadcast();
 }
 
 void UBattleActionMenu::HandleSkillSlotClicked(USkillDataAsset* Skill)
 {
 	if (!IsValid(Skill)) return;
-	
-	// SP 부족 여부를 먼저 검사, 부족하면 스킬 리스트 유지
+
 	// SP가 부족하면 메시지 출력 + 스킬리스트 유지 (아무것도 닫지 않고 return)
 	if (!IsValid(CurrentUnit) || !CurrentUnit->CanUseSkill(Skill))
 	{
@@ -241,12 +274,10 @@ void UBattleActionMenu::HandleSkillSlotClicked(USkillDataAsset* Skill)
 		);
 
 		ShowTempFeedbackMessage(Msg, 1.7f);
-		return; // ✅ 리스트/뷰 상태 유지
+		return;
 	}
-	
-	// 스킬 선택은 확정이므로, 리스트만 닫고 메인 버튼을 다시 보여주지 않음
-	// -> 공격 버튼과 동일하게 메뉴 자체를 숨겨서 중복 입력을 근본 차단
-	CurrentView = EActionMenuView::Main; // 다음번 ShowMenu에서 정상 복구될 수 있게 내부 상태는 메인으로
+
+	CurrentView = EActionMenuView::Main;
 	ApplyView();
 
 	OnSkillRequested.Broadcast(Skill);

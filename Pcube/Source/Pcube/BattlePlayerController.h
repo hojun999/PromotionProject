@@ -62,6 +62,7 @@ private:
 	void Input_ConfirmTarget();
 	void Input_ClickConfirmTarget();
 	void Input_CancelTarget();
+	void Input_BackOrCancel();
 	
 	// --- 포인터 캐시 ---
 	UPROPERTY()

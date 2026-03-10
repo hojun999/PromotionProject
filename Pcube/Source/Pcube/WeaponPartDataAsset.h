@@ -41,14 +41,27 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="WeaponPart")
 	FWeaponPartEffect Effect; // 장착 효과 스펙
 	
+	// 기존 SlotType / AttachmentSocketName은 레거시
+	// 실제 장착 가능 여부는 CompatibleEquipmentKeys 기반으로 판정
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="WeaponPart")
 	EWeaponModSlotType SlotType = EWeaponModSlotType::Custom;
+	
+	// 이 파츠를 장착할 수 있는 장비의 Key들
+	// 예: Weapon_Main, Weapon_Core, Armor_Body
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="WeaponPart|Compatibility")
+	TArray<FName> CompatibleEquipmentKeys;
+	
+	UFUNCTION(BlueprintPure, Category="WeaponPart|Compatibility")
+	bool IsCompatibleWithEquipmentKey(FName EquipmentKey) const
+	{
+		return EquipmentKey != NAME_None && CompatibleEquipmentKeys.Contains(EquipmentKey);
+	}
 	
 	// 캐릭터 정보 확인창에서 볼 수 있는 적용 중인 효과 텍스트
 	UFUNCTION(BlueprintCallable, Category="WeaponPart")
 	FText BuildEffectText() const; // ex - 투사체 + 1, 공격 횟수 +2
 	
-	// 무기 부품 외형 변경용 데이터
+	// 무기 부품 외형 변경용 데이터 (현재 장착 판정에는 사용하지 않음)
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="WeponPart|Visual")
 	TObjectPtr<UStaticMesh> AttachmentMesh = nullptr; // 무기에 붙일 메시
 	

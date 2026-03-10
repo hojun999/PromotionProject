@@ -9,8 +9,7 @@ class UImage;
 class UTextBlock;
 class UWeaponPartDataAsset;
 
-DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FOnEquipPartsSlotEquipRequested, FName, SlotSocketName, UWeaponPartDataAsset*, PartToEquip);
-DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnEquipPartsSlotUnequipRequested, FName, SlotSocketName);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnEquipPartsSlotClicked, UWeaponPartDataAsset*, Part);
 
 UCLASS()
 class PCUBE_API UEquipPartsSlotWidget : public UUserWidget
@@ -18,47 +17,34 @@ class PCUBE_API UEquipPartsSlotWidget : public UUserWidget
 	GENERATED_BODY()
 
 public:
-	void InitSlot(FName InSlotSocketName, FText InDisplayName);
-	void SetEquipped(UWeaponPartDataAsset* InEquippedPart);
-	void SetCompatibleParts(const TArray<UWeaponPartDataAsset*>& InCompatibleParts);
+	UFUNCTION(BlueprintCallable)
+	void Init(UWeaponPartDataAsset* InPart, int32 InQuantity);
 
 	UPROPERTY(BlueprintAssignable)
-	FOnEquipPartsSlotEquipRequested OnEquipRequested;
-
-	UPROPERTY(BlueprintAssignable)
-	FOnEquipPartsSlotUnequipRequested OnUnequipRequested;
+	FOnEquipPartsSlotClicked OnClicked;
 
 protected:
 	virtual void NativeConstruct() override;
 
 private:
-	UFUNCTION() void HandleSelectClicked();
-	UFUNCTION() void HandleUnequipClicked();
-
-	void RefreshVisuals();
-	void RefreshTooltip();
+	UFUNCTION()
+	void HandleClicked();
 
 private:
 	UPROPERTY(meta=(BindWidget))
-	UButton* Btn_Select = nullptr;
-
-	UPROPERTY(meta=(BindWidgetOptional))
-	UButton* Btn_Unequip = nullptr;
+	UButton* Btn_Root = nullptr;
 
 	UPROPERTY(meta=(BindWidgetOptional))
 	UImage* Img_Icon = nullptr;
 
 	UPROPERTY(meta=(BindWidgetOptional))
-	UTextBlock* Text_SlotName = nullptr;
+	UTextBlock* Text_Name = nullptr;
 
 	UPROPERTY(meta=(BindWidgetOptional))
-	UTextBlock* Text_CompatibleCount = nullptr;
-
-	FName SlotSocketName = NAME_None;
+	UTextBlock* Text_Count = nullptr;
 
 	UPROPERTY()
-	TObjectPtr<UWeaponPartDataAsset> EquippedPart = nullptr;
+	TObjectPtr<UWeaponPartDataAsset> Part = nullptr;
 
-	UPROPERTY()
-	TArray<TObjectPtr<UWeaponPartDataAsset>> CompatibleParts;
+	int32 Quantity = 0;
 };

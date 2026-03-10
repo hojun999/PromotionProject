@@ -7,6 +7,9 @@
 #include "BattleAllyUnit.h"
 #include "BattleBaseUnit.h"
 #include "BattlePlayerController.h"
+#include "BattleActionIntentWidget.h"
+#include "ItemDataAsset.h"
+#include "SkillDataAsset.h"
 #include "Blueprint/UserWidget.h"
 
 void ABattleHUD::BeginPlay()
@@ -33,6 +36,7 @@ void ABattleHUD::CreateAllWidgets()
 	APlayerController* PC = GetOwningPlayerController();
 	if (!PC) return;
 	
+	// 행동 순서 UI
 	if (ActionOrderClass)
 	{
 		ActionOrderWidget = CreateWidget<UBattleActionOrderWidget>(PC, ActionOrderClass);
@@ -42,6 +46,7 @@ void ABattleHUD::CreateAllWidgets()
 		}
 	}
 	
+	// 행동 선택 UI 
 	if (ActionMenuClass)
 	{
 		BattleActionMenuWidget = CreateWidget<UBattleActionMenu>(PC, ActionMenuClass);
@@ -52,6 +57,7 @@ void ABattleHUD::CreateAllWidgets()
 		}
 	}
 	
+	// 아군 유닛 초상화 및 체력 상태 위젯 생성
 	if (AllyStatusPanelClass)
 	{
 		AllyStatusPanelWidget = CreateWidget<UAllyStatusPanelWidget>(PC, AllyStatusPanelClass);
@@ -62,6 +68,7 @@ void ABattleHUD::CreateAllWidgets()
 		}
 	}
 	
+	// 전투 진행에 따른 텍스트 출력 위젯 생성
 	if (BattleStateNoticeClass)
 	{
 		BattleStateNoticeWidget = CreateWidget<UUserWidget>(PC, BattleStateNoticeClass);
@@ -117,32 +124,49 @@ void ABattleHUD::BindSubsystemEvents()
 
 void ABattleHUD::HandleBattleStateChanged(EBattleState NewState)
 {
-	// 전투 상태 텍스트/연출 위젯은 이후 BattleStateNoticeWidget 쪽에서 확장
+	if (NewState == EBattleState::ActionInput || NewState == EBattleState::Finished)
+	{
+		HideActionIntent();
+	}
 }
 
 void ABattleHUD::HandleBattleUnitSpawned(const TArray<AActor*>& Allies, const TArray<AActor*>& Enemies)
 {
+	UE_LOG(LogTemp, Warning, TEXT("[HUD] HandleBattleUnitSpawned Allies=%d Enemies=%d Panel=%s"),
+		Allies.Num(), Enemies.Num(), *GetNameSafe(AllyStatusPanelWidget));
+
 	if (AllyStatusPanelWidget)
 	{
 		AllyStatusPanelWidget->InitParty(Allies);
+	}
+	else
+	{
+		UE_LOG(LogTemp, Error, TEXT("[HUD] AllyStatusPanelWidget is NULL (cannot InitParty)"));
+	}
+
+	for (AActor* EnemyActor : Enemies)
+	{
+		if (ABattleBaseUnit* EnemyUnit = Cast<ABattleBaseUnit>(EnemyActor))
+		{
+			EnemyUnit->SetEnemyHPBarVisible(true);
+			EnemyUnit->RefreshEnemyHPBar();
+		}
 	}
 }
 
 void ABattleHUD::HandleTurnUnitChanged(ABattleBaseUnit* ActiveUnit)
 {
-	if (!ActiveUnit)
-	{
-		HideActionMenu();
-		if (AllyStatusPanelWidget)
-		{
-			AllyStatusPanelWidget->SetActiveUnit(nullptr);
-		}
-		return;
-	}
+	HideActionIntent();
+
+	if (!BattleActionMenuWidget || !ActiveUnit) return;
 
 	if (ABattleAllyUnit* AllyUnit = Cast<ABattleAllyUnit>(ActiveUnit))
 	{
-		ShowActionMenu(AllyUnit);
+		if (BattleActionMenuWidget)
+		{
+			BattleActionMenuWidget->ShowMenu(AllyUnit);
+		}
+	
 		if (AllyStatusPanelWidget)
 		{
 			AllyStatusPanelWidget->SetActiveUnit(AllyUnit);
@@ -150,20 +174,36 @@ void ABattleHUD::HandleTurnUnitChanged(ABattleBaseUnit* ActiveUnit)
 	}
 	else
 	{
-		HideActionMenu();
+		// 적 턴이면 ActiveBorder 끄기
 		if (AllyStatusPanelWidget)
 		{
 			AllyStatusPanelWidget->SetActiveUnit(nullptr);
 		}
+
+		// 적 턴이면 메뉴 숨기기
+		// if (BattleActionMenuWidget)
+		// {
+		// 	BattleActionMenuWidget->SetVisibility(ESlateVisibility::Collapsed);
+		// }
 	}
 }
 
 void ABattleHUD::ShowActionMenu(ABattleAllyUnit* AllyUnit)
 {
+	UE_LOG(LogTemp, Warning, TEXT("[HUD] ShowActionMenu unit=%s widget=%s visBefore=%d inViewport=%d"),
+	*GetNameSafe(AllyUnit),
+	*GetNameSafe(BattleActionMenuWidget),
+	BattleActionMenuWidget ? (int32)BattleActionMenuWidget->GetVisibility() : -1,
+	BattleActionMenuWidget ? (int32)BattleActionMenuWidget->IsInViewport() : -1);
+
 	if (!BattleActionMenuWidget || !AllyUnit) return;
-	
+
 	BattleActionMenuWidget->ShowMenu(AllyUnit);
 	BattleActionMenuWidget->SetVisibility(ESlateVisibility::Visible);
+
+	UE_LOG(LogTemp, Warning, TEXT("[HUD] Menu visAfter=%d inViewport=%d"),
+	(int32)BattleActionMenuWidget->GetVisibility(),
+	(int32)BattleActionMenuWidget->IsInViewport());
 }
 
 void ABattleHUD::HideActionMenu()
@@ -172,26 +212,59 @@ void ABattleHUD::HideActionMenu()
 	BattleActionMenuWidget->SetVisibility(ESlateVisibility::Collapsed);
 }
 
+void ABattleHUD::ShowActionIntentForSkill(USkillDataAsset* Skill)
+{
+	if (ActionIntentWidget)
+	{
+		ActionIntentWidget->ShowSkillIntent(Skill);
+	}
+}
+
+void ABattleHUD::ShowActionIntentForItem(UItemDataAsset* Item)
+{
+	if (ActionIntentWidget)
+	{
+		ActionIntentWidget->ShowItemIntent(Item);
+	}
+}
+
+void ABattleHUD::HideActionIntent()
+{
+	if (ActionIntentWidget)
+	{
+		ActionIntentWidget->ClearIntent();
+	}
+}
+
 void ABattleHUD::ShowGameOverUI()
 {
+	HideActionIntent();
 	if (GameOverWidget) GameOverWidget->SetVisibility(ESlateVisibility::Visible);
 }
 
 void ABattleHUD::ShowVictoryUI()
 {
+	HideActionIntent();
 	if (VictoryWidget) VictoryWidget->SetVisibility(ESlateVisibility::Visible);
 }
 
 void ABattleHUD::HandleActionOrderChanged(const TArray<AActor*>& NewOrder)
 {
+	UE_LOG(LogTemp, Warning, TEXT("BattleHUD: HandleActionOrderChanged Called! Unit Count: %d"), NewOrder.Num());
+	
 	if (ActionOrderWidget)
 	{
 		ActionOrderWidget->RefreshList(NewOrder);
+	}
+	else
+	{
+		UE_LOG(LogTemp, Error, TEXT("BattleHUD: TurnOrderWidget is NULL!"));
 	}
 }
 
 void ABattleHUD::HandleTargetChanged(AActor* NewTarget)
 {
+	if (!NewTarget) return;
 	// 타겟 강조/하이라이트 연동 지점
 }
 

@@ -9,6 +9,7 @@
 #include "SkillDataAsset.h"
 #include "UnitDataAsset.h"
 #include "BattleDamageTextActor.h"
+#include "BattleEnemyHPBarWidget.h"
 #include "BattleBaseUnit.generated.h"
 
 USTRUCT()
@@ -72,7 +73,7 @@ struct FSkillRuntimeSpec
 	FName MuzzleSocketName = NAME_None; // 발사 소켓
 	
 	UPROPERTY()
-	int32 ProjectileCount = 1; // 웨이브당 투사체 개수
+	int32 ProjectileCount = 1; // 1회 시전 당 투사체 개수
 	
 	UPROPERTY()
 	bool bSplitDamageAcrossProjectiles = true; // 투사체당 대미지 분배 여부
@@ -141,6 +142,12 @@ public:
 	UFUNCTION(BlueprintCallable)
 	float GetMaxHP() const;
 	
+	void RefreshBaseCombatStatsFromEquipment(bool bResetCurrentHPToMax = false);
+	
+	void SetEnemyHPBarVisible(bool bVisible);
+	void RefreshEnemyHPBar();
+
+	
 	UFUNCTION(BlueprintCallable)
 	bool IsDead() const { return bIsDead || CurrentHP <= 0.f; }
 	
@@ -150,8 +157,8 @@ public:
 	UFUNCTION(BlueprintCallable)
 	int32 GetMaxSkillPoints() const { return UnitData ? FMath::Max(0, UnitData->MaxSkillPoints) : 0; }
 	
-	UFUNCTION(BlueprintCallable)
-	int32 GetSkillNumber(); // 유닛의 보유 스킬 개수를 구하는 함수
+	// UFUNCTION(BlueprintCallable)
+	// int32 GetSkillNumber(); // 유닛의 보유 스킬 개수를 구하는 함수
 	
 	bool CanUseSkill(const USkillDataAsset* Skill) const;
 	bool SpendSkillPoints(int32 Cost);
@@ -174,6 +181,10 @@ public:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="UI")
 	class USceneComponent* UIAnchorPoint;
 
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="UI")
+	class UWidgetComponent* EnemyHPBarComponent = nullptr;
+
+	
 	// --- 무기 비주얼(캐릭터 손 소켓에 부착되는 무기 본체 StaticMesh) ---
 	UFUNCTION(BlueprintCallable, Category="Visual|Weapon")
 	void RefreshWeaponVisual();
@@ -202,6 +213,7 @@ public:
 	void ExecuteAction(USkillDataAsset* SkillData, AActor* TargetUnit);
 	void ExecuteAction(USkillDataAsset* SkillData, const TArray<AActor*>& Targets);
 	void ExecuteActionOnTargets(USkillDataAsset* SkillData, const TArray<ABattleBaseUnit*>& Targets);
+	void ApplyCurrentSkillDamage();
 	void ApplyStun(int32 DurationActions);
 	
 	UFUNCTION(BlueprintCallable)
@@ -265,6 +277,9 @@ protected:
 	UFUNCTION()
 	void HandleEquipmentChanged(int32 ChangedPartyIndex);
 	
+	UFUNCTION()
+	void HandleEnemyHPBarChanged(float InCurrentHP, float InMaxHP);
+	
 	// 마우스 클릭 시 호출되는 엔진 기본 이벤트
 	virtual void NotifyActorOnClicked(FKey ButtonPressed = EKeys::LeftMouseButton) override;
 	
@@ -274,11 +289,17 @@ protected:
 	
 private:
 	UPROPERTY()
+	ABattleBaseUnit* CurrentActionTarget;	// 액션 시작 시 확정된 스킬 스펙(노티파이마다 재계산 금지)
+	
+	UPROPERTY()
 	TArray<TWeakObjectPtr<ABattleBaseUnit>> CurrentActionTargets;
 	
 	UPROPERTY()
 	class USkillDataAsset* CurrentSkillData; // 현재 사용 중인 스킬 데이터
 
+	UPROPERTY()
+	bool bDamageAppliedThisAction = false;
+	
 	UPROPERTY()
 	int32 ActionTotalHits = 1;
 	
@@ -289,8 +310,12 @@ private:
 	UPROPERTY()
 	bool bActionMontageEnded = false; // 몽타주 종료 여부 (투사체 대기 시 FinishAction 지연용)
 	
+	FTimerHandle NoMontageActionTimerHandle;
+	
 	UAnimMontage* ResolveActionMontage(const USkillDataAsset* Skill) const;
 	FName ResolveMuzzleSocketName(const USkillDataAsset* Skill) const;
+	float GetEnemyNoMontageDelaySeconds() const;
+	void HandleNoMontageActionDelayExpired();
 	
 	void TryFinishAction(); // 몽타주 종료 + 투사체 전부 종료면 FinishAction 호출
 	

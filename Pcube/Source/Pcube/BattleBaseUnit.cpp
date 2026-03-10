@@ -11,6 +11,7 @@
 #include "Kismet/GameplayStatics.h"
 #include "BattleProjectile.h"
 #include "BattleDamageTextActor.h"
+#include "Components/WidgetComponent.h"
 
 class APlayerState;
 
@@ -81,9 +82,13 @@ void ABattleBaseUnit::BeginPlay()
 		}
 	}
 
+	OnHPChanged.RemoveDynamic(this, &ABattleBaseUnit::HandleEnemyHPBarChanged);
+	OnHPChanged.AddDynamic(this, &ABattleBaseUnit::HandleEnemyHPBarChanged);
+
 	RefreshEquipmentVisuals();
-	
+	RefreshEnemyHPBar();
 }
+
 
 void ABattleBaseUnit::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
@@ -100,8 +105,72 @@ void ABattleBaseUnit::EndPlay(const EEndPlayReason::Type EndPlayReason)
 
 void ABattleBaseUnit::RefreshWeaponVisual()
 {
-	// 기존 Blueprint 호출 호환용 래퍼. 실제 구현은 장비 전체 동기화 함수로 통합한다.
-	RefreshEquipmentVisuals();
+	if (!WeaponMeshComp)
+	{
+		return;
+	}
+
+	// 스켈레탈 유닛이 아니면 무기 표시 X
+	USkeletalMeshComponent* SkelComp = GetMesh();
+	if (!SkelComp || !UnitData)
+	{
+		WeaponMeshComp->SetStaticMesh(nullptr);
+		WeaponMeshComp->SetVisibility(false, true);
+		return;
+	}
+
+	const FName AttachSocket = UnitData->WeaponAttachSocketName;
+	if (AttachSocket == NAME_None)
+	{
+		// 유닛 데이터에서 소켓을 지정하지 않은 경우 무기 비주얼 숨김
+		WeaponMeshComp->SetVisibility(false, true);
+		return;
+	}
+
+	if (!SkelComp->DoesSocketExist(AttachSocket))
+	{
+		UE_LOG(LogTemp, Warning, TEXT("[WeaponVisual] %s: Attach socket '%s' not found on SkeletalMesh '%s'"),
+	*GetName(), *AttachSocket.ToString(), *GetNameSafe(SkelComp->GetSkeletalMeshAsset()));
+		WeaponMeshComp->SetVisibility(false, true);
+		return;
+	}
+
+	// 1. 우선 장착 시스템에 무기가 있으면 사용
+	UWeaponDataAsset* WeaponDA = nullptr;
+	if (UGameInstance* GI = GetGameInstance())
+	{
+		if (UEquipmentSubsystem* Equip = GI->GetSubsystem<UEquipmentSubsystem>())
+		{
+			if (PartyIndex != INDEX_NONE)
+			{
+				WeaponDA = Equip->GetEquippedWeapon(PartyIndex);
+			}
+		}
+	}
+
+	// 2. fallback: 유닛 기본 무기
+	if (!WeaponDA)
+	{
+		WeaponDA = UnitData->DefaultWeapon;
+	}
+
+	if (!WeaponDA || !WeaponDA->WeaponMesh)
+	{
+		WeaponMeshComp->SetStaticMesh(nullptr);
+		WeaponMeshComp->SetVisibility(false, true);
+		WeaponMeshComp->SetHiddenInGame(true, true);
+		return;
+	}
+
+	WeaponMeshComp->SetVisibility(true, true);
+	WeaponMeshComp->SetHiddenInGame(false, true);
+	WeaponMeshComp->SetStaticMesh(WeaponDA->WeaponMesh);
+	WeaponMeshComp->AttachToComponent(
+		SkelComp,
+		FAttachmentTransformRules::SnapToTargetIncludingScale,
+		AttachSocket
+	);
+	
 }
 
 void ABattleBaseUnit::HandleEquipmentChanged(int32 ChangedPartyIndex)
@@ -109,6 +178,33 @@ void ABattleBaseUnit::HandleEquipmentChanged(int32 ChangedPartyIndex)
 	if (PartyIndex == INDEX_NONE) return;
 	if (ChangedPartyIndex != PartyIndex) return;
 	RefreshEquipmentVisuals();
+}
+
+void ABattleBaseUnit::HandleEnemyHPBarChanged(float InCurrentHP, float InMaxHP)
+{
+	RefreshEnemyHPBar();
+}
+
+void ABattleBaseUnit::SetEnemyHPBarVisible(bool bVisible)
+{
+	if (!EnemyHPBarComponent) return;
+	EnemyHPBarComponent->SetVisibility(bVisible, true);
+	EnemyHPBarComponent->SetHiddenInGame(!bVisible, true);
+}
+
+void ABattleBaseUnit::RefreshEnemyHPBar()
+{
+	if (!EnemyHPBarComponent) return;
+
+	const bool bShouldShow = (PartyIndex == INDEX_NONE) && !IsDead();
+	SetEnemyHPBarVisible(bShouldShow);
+	if (!bShouldShow) return;
+
+	if (UBattleEnemyHPBarWidget* HPWidget = Cast<UBattleEnemyHPBarWidget>(EnemyHPBarComponent->GetUserWidgetObject()))
+	{
+		HPWidget->InitForUnitName(UnitData ? UnitData->UnitName : GetName());
+		HPWidget->SetHP(CurrentHP, GetMaxHP());
+	}
 }
 
 void ABattleBaseUnit::RefreshEquipmentVisuals()
@@ -141,40 +237,49 @@ void ABattleBaseUnit::RefreshEquipmentVisuals()
 		return;
 	}
 
-	// 무기 본체 적용: 장착 무기 우선, 없으면 유닛 기본 무기 사용
+	EquipSub->InitializeUnitLoadoutIfMissing(PartyIndex, UnitData);
+
+	// 무기 본체 적용
 	UWeaponDataAsset* WeaponDA = EquipSub->GetEquippedWeapon(PartyIndex);
 	if (!WeaponDA && UnitData)
 	{
 		WeaponDA = UnitData->DefaultWeapon;
 	}
-
 	if (WeaponDA && WeaponDA->WeaponMesh)
 	{
 		WeaponMeshComp->SetStaticMesh(WeaponDA->WeaponMesh);
-		WeaponMeshComp->SetVisibility(true, true);
-		WeaponMeshComp->SetHiddenInGame(false, true);
+		WeaponMeshComp->SetHiddenInGame(false);
 	}
 	else
 	{
 		WeaponMeshComp->SetStaticMesh(nullptr);
-		WeaponMeshComp->SetVisibility(false, true);
-		WeaponMeshComp->SetHiddenInGame(true, true);
+		WeaponMeshComp->SetHiddenInGame(true);
 	}
 
-	// 무기 본체를 캐릭터 메시 소켓에 부착
+	// 무기 본체를 캐릭터 메시 소켓에 붙이고 싶으면 여기서 처리
 	if (USkeletalMeshComponent* Skel = GetMesh())
 	{
-		const FName AttachSocket = (WeaponHoldSocketName != NAME_None)
-			? WeaponHoldSocketName
-			: (UnitData ? UnitData->WeaponAttachSocketName : NAME_None);
+		FName AttachSocket = WeaponHoldSocketName;
+
+		if (AttachSocket == NAME_None && UnitData)
+		{
+			AttachSocket = UnitData->WeaponAttachSocketName;
+		}
 
 		if (AttachSocket != NAME_None && Skel->DoesSocketExist(AttachSocket))
 		{
-			WeaponMeshComp->AttachToComponent(Skel, FAttachmentTransformRules::SnapToTargetIncludingScale, AttachSocket);
+			WeaponMeshComp->AttachToComponent(
+				Skel,
+				FAttachmentTransformRules::SnapToTargetIncludingScale,
+				AttachSocket
+			);
 		}
 		else
 		{
-			WeaponMeshComp->AttachToComponent(Skel, FAttachmentTransformRules::KeepRelativeTransform);
+			WeaponMeshComp->AttachToComponent(
+				Skel,
+				FAttachmentTransformRules::KeepRelativeTransform
+			);
 		}
 	}
 
@@ -252,9 +357,21 @@ void ABattleBaseUnit::InitUnit(UUnitDataAsset* TransferredUnitData)
 	// --- 스탯 초기화 ---
 	UnitData = TransferredUnitData;
 		
-	const float MaxHP = GetMaxHP();
-	const float Speed = (UnitData->BaseStats.Speed > 0.f) ? UnitData->BaseStats.Speed : 1.f;
-	const float ATK = (UnitData->BaseStats.AttackPower > 0.f) ? UnitData->BaseStats.AttackPower : 1.f;
+	FUnitBaseStats ResolvedStats = UnitData->BaseStats;
+	if (PartyIndex != INDEX_NONE)
+	{
+		if (UGameInstance* GI = GetGameInstance())
+		{
+			if (UEquipmentSubsystem* EquipSub = GI->GetSubsystem<UEquipmentSubsystem>())
+			{
+				ResolvedStats = EquipSub->ResolveFinalStats(PartyIndex, ResolvedStats);
+			}
+		}
+	}
+
+	const float MaxHP = FMath::Max(1.f, ResolvedStats.MaxHP);
+	const float Speed = FMath::Max(1.f, ResolvedStats.Speed);
+	const float ATK = FMath::Max(1.f, ResolvedStats.AttackPower);
 	
 	CurrentHP = MaxHP;
 	CurrentSpeed = Speed;
@@ -498,6 +615,34 @@ void ABattleBaseUnit::ExecuteActionOnTargets(USkillDataAsset* SkillData, const T
 	AnimInstance->Montage_SetEndDelegate(EndDelegate, MontageToPlay);
 }
 
+void ABattleBaseUnit::ApplyCurrentSkillDamage()
+{
+	if (!CurrentSkillData || !CurrentActionTarget) return;
+	
+	const int32 FinalHitCount = FMath::Max(1, CurrentSkillData->BaseHitCount);
+	const float DamagePerHit = FMath::Max(1.f, CurrentAttackPower * CurrentSkillData->DamageMultiplier);
+	
+	// 타겟 배열이 비어있으면 기존 단일 타겟 fallback
+	if (CurrentActionTargets.Num() == 0 && CurrentActionTarget)
+	{
+		CurrentActionTargets.Add(CurrentActionTarget);
+	}
+	
+	for (TWeakObjectPtr<ABattleBaseUnit> TPtr : CurrentActionTargets)
+	{
+		ABattleBaseUnit* TargetUnit = TPtr.Get();
+		if (!IsValid(TargetUnit) || TargetUnit->IsDead()) continue;
+		
+		for (int32 i = 0; i < FinalHitCount; ++i)
+		{
+			UE_LOG(LogTemp, Warning, TEXT("[Damage] %s -> %s : %.1f (hit %d/%d)"),
+				*GetName(), *TargetUnit->GetName(), DamagePerHit, i + 1, FinalHitCount);
+
+			UGameplayStatics::ApplyDamage(TargetUnit, DamagePerHit, GetController(), this, UDamageType::StaticClass());
+		}
+	}
+}
+
 void ABattleBaseUnit::HandleHitNotify(FName NotifyName, const FBranchingPointNotifyPayload& Payload)
 {
 	UE_LOG(LogTemp, Warning, TEXT("[Notify] %s"), *NotifyName.ToString());
@@ -695,10 +840,10 @@ void ABattleBaseUnit::NotifyActorOnClicked(FKey ButtonPressed)
 	// UI 띄우는 이벤트 호출 구현부
 }
 
-int32 ABattleBaseUnit::GetSkillNumber()
-{
-	return UnitData ? UnitData->SkillList.Num() : 0;
-}
+// int32 ABattleBaseUnit::GetSkillNumber()
+// {
+// 	return UnitData ? UnitData->SkillList.Num() : 0;
+// }
 
 UAnimMontage* ABattleBaseUnit::ResolveActionMontage(const USkillDataAsset* Skill) const
 {
@@ -736,9 +881,38 @@ FName ABattleBaseUnit::ResolveMuzzleSocketName(const USkillDataAsset* Skill) con
 }
 
 
+float ABattleBaseUnit::GetEnemyNoMontageDelaySeconds() const
+{
+	// 적 유닛은 PartyIndex == INDEX_NONE
+	if (PartyIndex != INDEX_NONE) return 0.f;
+	
+	// UnitData에 값이 있으면 사용, 없으면 기본값(1.5)
+	if (UnitData && UnitData->EnemyNoMontageAttackDelaySeconds > 0.f)
+	{
+		return UnitData->EnemyNoMontageAttackDelaySeconds;
+	}
+	return 1.5f;
+}
+
+void ABattleBaseUnit::HandleNoMontageActionDelayExpired()
+{
+	// 지연 중 사망 등으로 실행 불가하면 안전 종료
+	if (IsDead())
+	{
+		bActionMontageEnded = true;
+		TryFinishAction();
+		return;
+	}
+
+	ApplyRemainingHits();
+	bActionMontageEnded = true;
+	TryFinishAction();
+}
+
 FSkillRuntimeModifier ABattleBaseUnit::GetSkillRuntimeModifier(const USkillDataAsset* Skill) const
 {
 	FSkillRuntimeModifier Modifier;
+	Modifier.DamageMulMul = 1.f;
 
 	if (PartyIndex == INDEX_NONE)
 	{
@@ -749,16 +923,17 @@ FSkillRuntimeModifier ABattleBaseUnit::GetSkillRuntimeModifier(const USkillDataA
 	{
 		if (const UEquipmentSubsystem* EquipSub = GI->GetSubsystem<UEquipmentSubsystem>())
 		{
-			const FWeaponPartEffect Effect = EquipSub->GetTotalWeaponPartEffect(PartyIndex);
-			Modifier.BonusHitCount = Effect.BonusHitCount;
-			Modifier.BonusProjectileCount = Effect.BonusProjectileCount;
-			Modifier.DamageMulAdd = Effect.DamageMulAdd;
-			Modifier.DamageMulMul = Effect.DamageMulMul;
+			const FWeaponPartEffect Effect = EquipSub->GetTotalEquippedPartEffect(PartyIndex);
+			Modifier.BonusHitCount += Effect.BonusHitCount;
+			Modifier.BonusProjectileCount += Effect.BonusProjectileCount;
+			Modifier.DamageMulAdd += Effect.DamageMulAdd;
+			Modifier.DamageMulMul *= Effect.DamageMulMul;
 		}
 	}
 
 	return Modifier;
 }
+
 
 FSkillRuntimeSpec ABattleBaseUnit::BuildRuntimeSpec(const USkillDataAsset* Skill) const
 {
@@ -814,7 +989,63 @@ float ABattleBaseUnit::GetEffectiveAttackPower() const
 
 float ABattleBaseUnit::GetMaxHP() const
 {
-	return UnitData ? FMath::Max(1.f, UnitData->BaseStats.MaxHP) : 100.f;
+	if (!UnitData)
+	{
+		return 100.f;
+	}
+
+	FUnitBaseStats Resolved = UnitData->BaseStats;
+	if (PartyIndex != INDEX_NONE)
+	{
+		if (const UGameInstance* GI = GetGameInstance())
+		{
+			if (const UEquipmentSubsystem* EquipSub = GI->GetSubsystem<UEquipmentSubsystem>())
+			{
+				Resolved = EquipSub->ResolveFinalStats(PartyIndex, Resolved);
+			}
+		}
+	}
+
+	return FMath::Max(1.f, Resolved.MaxHP);
+}
+
+
+void ABattleBaseUnit::RefreshBaseCombatStatsFromEquipment(bool bResetCurrentHPToMax)
+{
+	if (!UnitData)
+	{
+		return;
+	}
+
+	FUnitBaseStats Resolved = UnitData->BaseStats;
+	if (PartyIndex != INDEX_NONE)
+	{
+		if (UGameInstance* GI = GetGameInstance())
+		{
+			if (UEquipmentSubsystem* EquipSub = GI->GetSubsystem<UEquipmentSubsystem>())
+			{
+				EquipSub->InitializeUnitLoadoutIfMissing(PartyIndex, UnitData);
+				Resolved = EquipSub->ResolveFinalStats(PartyIndex, Resolved);
+			}
+		}
+	}
+
+	const float OldMaxHP = UnitData ? FMath::Max(1.f, UnitData->BaseStats.MaxHP) : 100.f;
+	const float NewMaxHP = FMath::Max(1.f, Resolved.MaxHP);
+	CurrentSpeed = Resolved.Speed;
+	CurrentAttackPower = Resolved.AttackPower;
+
+	if (bResetCurrentHPToMax)
+	{
+		CurrentHP = NewMaxHP;
+	}
+	else
+	{
+		const float Ratio = (OldMaxHP > KINDA_SMALL_NUMBER) ? FMath::Clamp(CurrentHP / OldMaxHP, 0.f, 1.f) : 1.f;
+		CurrentHP = FMath::Clamp(NewMaxHP * Ratio, 0.f, NewMaxHP);
+	}
+
+	OnHPChanged.Broadcast(CurrentHP, NewMaxHP);
 }
 
 void ABattleBaseUnit::ApplyHealToUnit(ABattleBaseUnit* Target, float HealAmount)
