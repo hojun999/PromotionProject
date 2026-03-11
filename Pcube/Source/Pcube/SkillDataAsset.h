@@ -89,7 +89,9 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Delivery", meta=(EditCondition="DeliveryType==ESkillDeliveryType::Projectile", ClampMin="0.0"))
 	float ProjectileSpawnInterval = 0.05f;
 	
-	
+	// Instant 타입 다중 히트 사이 시간 간격(초). 0이면 즉시 전부 적용
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Delivery", meta=(EditCondition="DeliveryType==ESkillDeliveryType::Instant", ClampMin="0.0"))
+	float HitSpawnInterval = 0.15f;
 	
 	// --- Damage ---
 	// 최종 데미지 = (Attacker ATK * DamageMultiplier) - 추가 보정은 런타임 Spec에서

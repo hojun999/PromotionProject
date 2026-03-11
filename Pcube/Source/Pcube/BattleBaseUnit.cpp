@@ -580,13 +580,28 @@ void ABattleBaseUnit::ExecuteActionOnTargets(USkillDataAsset* SkillData, const T
 	}
 	
 	
-	// 애니메이션 없으면 즉시 처리 - 프로토타입
+	// 애니메이션 없으면 딜레이 후 처리 
 	UAnimInstance* AnimInstance = GetMesh() ? GetMesh()->GetAnimInstance() : nullptr;
 	UAnimMontage* MontageToPlay = ResolveActionMontage(SkillData);
 	if (!AnimInstance || !MontageToPlay)
 	{
-		ApplyRemainingHits();
-		FinishAction();
+		const float Delay = GetEnemyNoMontageDelaySeconds(); 
+		if (Delay > 0.f) 
+		{
+			GetWorldTimerManager().ClearTimer(NoMontageActionTimerHandle); 
+			GetWorldTimerManager().SetTimer( 
+				NoMontageActionTimerHandle, 
+				this, 
+				&ABattleBaseUnit::HandleNoMontageActionDelayExpired, 
+				Delay, 
+				false 
+			); 
+		} 
+		else 
+		{
+			ApplyRemainingHits(); 
+			FinishAction(); 
+		} 
 		return;
 	}
 	
@@ -614,6 +629,7 @@ void ABattleBaseUnit::ExecuteActionOnTargets(USkillDataAsset* SkillData, const T
 	EndDelegate.BindUObject(this, &ABattleBaseUnit::OnActionMontageEnded);
 	AnimInstance->Montage_SetEndDelegate(EndDelegate, MontageToPlay);
 }
+
 
 void ABattleBaseUnit::ApplyCurrentSkillDamage()
 {
@@ -653,9 +669,20 @@ void ABattleBaseUnit::HandleHitNotify(FName NotifyName, const FBranchingPointNot
 		return;
 	}
 	
-	if (NotifyName == Notify_Hit || NotifyName == Notify_Fire)
+	if (NotifyName == Notify_Hit) // Instant 다중 히트 시퀀스 시작
 	{
-		ApplyOneHit(); // 다타면 Hit 노티파이를 여러 개 박는 방식
+		if (CurrentActionSpec.DeliveryType == ESkillDeliveryType::Instant)
+		{
+			ApplyInstantHitSequence(); // HitCount만큼 시간차 처리
+		}
+		else
+		{
+			ApplyOneHit(); // Projectile은 기존 방식 유지
+		}
+	}
+	else if (NotifyName == Notify_Fire)
+	{
+		ApplyOneHit(); // Fire 노티파이는 투사체 발사
 	}
 	else if (NotifyName == Notify_Effect)
 	{
@@ -1059,6 +1086,54 @@ void ABattleBaseUnit::ApplyHealToUnit(ABattleBaseUnit* Target, float HealAmount)
 	UE_LOG(LogTemp, Warning, TEXT("[Heal] %s +%.1f => %.1f/%.1f"),
 		*Target->GetName(), HealAmount, Target->CurrentHP, MaxHP);
 }
+
+// Instant 타입 다중 히트를 시간차를 두고 순차 적용
+void ABattleBaseUnit::ApplyInstantHitSequence()
+{ 
+	if (!CurrentSkillData) return;
+	
+	GetWorldTimerManager().ClearTimer(HitSequenceTimerHandle);
+	
+	const float Interval = FMath::Max(0.f, CurrentSkillData->HitSpawnInterval);
+	
+	if (FMath::IsNearlyZero(Interval) || ActionTotalHits <= 1)
+	{
+		// 인터벌 0이거나 1타면 즉시 전부 적용
+		ApplyRemainingHits();
+		return;
+	}
+	
+	// 첫 타는 즉시, 이후는 Interval 간격으로 타이머 반복
+	ApplyOneHit();
+	
+	if (ActionHitsApplied < ActionTotalHits) 
+	{ 
+		GetWorldTimerManager().SetTimer( 
+			HitSequenceTimerHandle, 
+			this, 
+			&ABattleBaseUnit::OnHitSequenceTimerTick, 
+			Interval, 
+			true // 반복 
+		); 
+	} 
+}
+
+// HitSequence 타이머 틱 - 한 번 호출될 때마다 ApplyOneHit 1회 
+void ABattleBaseUnit::OnHitSequenceTimerTick() 
+{ 
+	if (ActionHitsApplied >= ActionTotalHits) 
+	{ 
+		GetWorldTimerManager().ClearTimer(HitSequenceTimerHandle); 
+		return; 
+	} 
+	
+	ApplyOneHit(); 
+	
+	if (ActionHitsApplied >= ActionTotalHits) 
+	{ 
+		GetWorldTimerManager().ClearTimer(HitSequenceTimerHandle); 
+	} 
+} 
 
 // 1hit - 데미지/힐/버프 모두 여기서 처리
 void ABattleBaseUnit::ApplyOneHit()

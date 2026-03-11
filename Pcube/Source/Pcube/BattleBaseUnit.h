@@ -311,6 +311,7 @@ private:
 	bool bActionMontageEnded = false; // 몽타주 종료 여부 (투사체 대기 시 FinishAction 지연용)
 	
 	FTimerHandle NoMontageActionTimerHandle;
+	FTimerHandle HitSequenceTimerHandle;
 	
 	UAnimMontage* ResolveActionMontage(const USkillDataAsset* Skill) const;
 	FName ResolveMuzzleSocketName(const USkillDataAsset* Skill) const;
@@ -344,6 +345,8 @@ private:
 	
 	void ApplyOneHit(); // 1타 or 1회 효과 적용
 	void ApplyRemainingHits(); // 남은 타수 일괄 적용
+	void ApplyInstantHitSequence(); // Instant 다중 히트 시간차 적용 시퀀스 시작
+	void OnHitSequenceTimerTick(); // HitSequenceTimerHandle 콜백
 	void TickBuffDuration_OnActionEnd(); // 본인 행동 종료시 지속턴 감소
 	
 	void SpawnDamageText(float DamageAmount); // TakeDamage에서 호출
