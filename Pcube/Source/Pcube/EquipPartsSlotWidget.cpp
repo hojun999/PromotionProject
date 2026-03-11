@@ -20,7 +20,7 @@ void UEquipPartsSlotWidget::Init(UWeaponPartDataAsset* InPart, int32 InQuantity)
 {
 	Part = InPart;
 	Quantity = InQuantity;
-	bAvailable = (InQuantity > 0);
+	const bool bAvailableVal = (Part != nullptr && Quantity > 0);
 
 	if (Img_Icon)
 	{
@@ -33,6 +33,7 @@ void UEquipPartsSlotWidget::Init(UWeaponPartDataAsset* InPart, int32 InQuantity)
 		{
 			Img_Icon->SetVisibility(ESlateVisibility::Hidden);
 		}
+		Img_Icon->SetRenderOpacity(bAvailableVal ? 1.f : 0.35f);
 	}
 
 	if (Text_Name)
@@ -42,45 +43,26 @@ void UEquipPartsSlotWidget::Init(UWeaponPartDataAsset* InPart, int32 InQuantity)
 
 	if (Text_Count)
 	{
-		// 보유 중이면 수량 표시, 없으면 "없음" 표시
-		if (bAvailable)
-		{
-			Text_Count->SetText(FText::FromString(FString::Printf(TEXT("x%d"), Quantity)));
-		}
-		else
-		{
-			Text_Count->SetText(FText::FromString(TEXT("없음")));
-		}
+		// 수량 0이면 "없음", 있으면 수량 표시
+		const FString CountStr = bAvailableVal
+			? FString::Printf(TEXT("x%d"), Quantity)
+			: TEXT("없음");
+		Text_Count->SetText(FText::FromString(CountStr));
 	}
 
-	ApplyAvailability(bAvailable);
-}
-
-void UEquipPartsSlotWidget::ApplyAvailability(bool bIsAvailable)
-{
-	// 버튼: 인벤에 없으면 클릭 불가
 	if (Btn_Root)
 	{
-		Btn_Root->SetIsEnabled(bIsAvailable && Part != nullptr);
+		Btn_Root->SetIsEnabled(bAvailableVal);
+		UE_LOG(LogTemp, Warning, TEXT("[SlotWidget] Init Part=%s Qty=%d bAvailable=%d IsEnabled=%d"),
+	*GetNameSafe(Part), Quantity, bAvailableVal ? 1 : 0, Btn_Root->GetIsEnabled() ? 1 : 0);
 	}
-
-	// 아이콘: 인벤에 없으면 어둡게
-	if (Img_Icon)
-	{
-		Img_Icon->SetRenderOpacity(bIsAvailable ? 1.f : UnavailableOpacity);
-	}
-
-	// 이름 텍스트도 같이 어둡게
-	if (Text_Name)
-	{
-		Text_Name->SetRenderOpacity(bIsAvailable ? 1.f : UnavailableOpacity);
-	}
+	
 }
 
 void UEquipPartsSlotWidget::HandleClicked()
 {
-	// bAvailable 체크는 버튼 비활성화로 이미 막혀있지만 방어적으로 한 번 더 체크
-	if (Part && bAvailable)
+	UE_LOG(LogTemp, Warning, TEXT("[SlotWidget] HandleClicked Part=%s"), *GetNameSafe(Part));
+	if (Part)
 	{
 		OnClicked.Broadcast(Part);
 	}

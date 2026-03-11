@@ -174,6 +174,8 @@ bool UEquipmentSubsystem::CanEquipWeaponPart(int32 PartyIndex, FName PartSlotKey
 	const FName StoredKey = ResolveStoredPartKey(PartyIndex, PartSlotKeyOrSocketName);
 	if (StoredKey == NAME_None)
 	{
+		UE_LOG(LogTemp, Warning, TEXT("[CanEquip] ResolveStoredPartKey returned None. PartyIndex=%d SlotKey=%s (무기/방어구가 장착되지 않았거나 SlotId 불일치)"),
+			PartyIndex, *PartSlotKeyOrSocketName.ToString());
 		return false;
 	}
 
@@ -204,10 +206,13 @@ bool UEquipmentSubsystem::CanEquipWeaponPart(int32 PartyIndex, FName PartSlotKey
 }
 
 
+
 bool UEquipmentSubsystem::EquipWeaponPart(int32 PartyIndex, FName PartSlotKeyOrSocketName, UWeaponPartDataAsset* NewPart)
 {
 	if (!CanEquipWeaponPart(PartyIndex, PartSlotKeyOrSocketName, NewPart))
 	{
+		UE_LOG(LogTemp, Warning, TEXT("[EquipPart] CanEquip FAILED PartyIndex=%d SlotKey=%s Part=%s"),
+			PartyIndex, *PartSlotKeyOrSocketName.ToString(), *GetNameSafe(NewPart));
 		return false;
 	}
 
@@ -238,6 +243,7 @@ bool UEquipmentSubsystem::EquipWeaponPart(int32 PartyIndex, FName PartSlotKeyOrS
 	OnEquipmentChanged.Broadcast(PartyIndex);
 	return true;
 }
+
 
 
 bool UEquipmentSubsystem::UnequipWeaponPart(int32 PartyIndex, FName PartSlotKeyOrSocketName)
@@ -290,16 +296,12 @@ FEquipmentStatBonus UEquipmentSubsystem::GetTotalEquipmentBaseStatBonus(int32 Pa
 		Out.MaxHP += State.Weapon->BaseStatBonus.MaxHP;
 		Out.Speed += State.Weapon->BaseStatBonus.Speed;
 		Out.AttackPower += State.Weapon->BaseStatBonus.AttackPower;
-		
-		//AccumulateStatBonus(Out, State.Weapon->BaseStatBonus);
 	}
 	if (State.Armor)
 	{
 		Out.MaxHP += State.Armor->BaseStatBonus.MaxHP;
 		Out.Speed += State.Armor->BaseStatBonus.Speed;
 		Out.AttackPower += State.Armor->BaseStatBonus.AttackPower;
-		
-		//AccumulateStatBonus(Out, State.Armor->BaseStatBonus);
 	}
 
 	return Out;
@@ -314,24 +316,3 @@ FUnitBaseStats UEquipmentSubsystem::ResolveFinalStats(int32 PartyIndex, const FU
 	Out.AttackPower = FMath::Max(1.f, Out.AttackPower + Bonus.AttackPower);
 	return Out;
 }
-
-
-// FWeaponPartEffect UEquipmentSubsystem::GetTotalWeaponPartEffect(int32 PartyIndex) const
-// {
-// 	FWeaponPartEffect Out;
-// 	Out.DamageMulMul = 1.f;
-//
-// 	if (!IsValidParty(PartyIndex)) return Out;
-//
-// 	for (const auto& KVP : PartyWeapons[PartyIndex].EquippedParts)
-// 	{
-// 		const UWeaponPartDataAsset* P = KVP.Value;
-// 		if (!P) continue;
-//
-// 		Out.BonusProjectileCount += P->Effect.BonusProjectileCount;
-// 		Out.BonusHitCount += P->Effect.BonusHitCount;
-// 		Out.DamageMulAdd += P->Effect.DamageMulAdd;
-// 		Out.DamageMulMul *= P->Effect.DamageMulMul;
-// 	}
-// 	return Out;
-// }
