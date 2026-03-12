@@ -30,6 +30,11 @@ struct FUnitEquipmentState
 	// 현재는 부품 슬롯 키(SlotId) -> 장착 파츠로 저장
 	UPROPERTY()
 	TMap<FName, TObjectPtr<UWeaponPartDataAsset>> EquippedParts;
+	
+	// 이 장비 상태가 어떤 UnitData 기준으로 초기화됐는지 추적 // 추가됨
+	// UnitData가 바뀌면 장비를 리셋해서 DefaultWeapon으로 재초기화 // 추가됨
+	UPROPERTY() // 추가됨
+	TObjectPtr<UUnitDataAsset> SourceUnitData = nullptr; // 추가됨
 };
 
 UCLASS()

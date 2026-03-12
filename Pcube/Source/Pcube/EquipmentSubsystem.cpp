@@ -46,6 +46,16 @@ void UEquipmentSubsystem::InitializeUnitLoadoutIfMissing(int32 PartyIndex, UUnit
 
 	FUnitEquipmentState& State = PartyEquipments[PartyIndex];
 
+	// UnitData가 바뀌었으면 장비 상태 리셋 후 재초기화 
+	if (State.SourceUnitData != UnitData) 
+	{ 
+		State.Weapon = nullptr; 
+		State.Armor = nullptr; 
+		State.EquippedParts.Empty(); 
+		State.SourceUnitData = UnitData; 
+		UE_LOG(LogTemp, Warning, TEXT("[EquipSub] PartyIndex=%d UnitData 변경 감지 - 장비 리셋: %s"), PartyIndex, *GetNameSafe(UnitData)); 
+	} 
+
 	if (!State.Weapon && UnitData->DefaultWeapon)
 	{
 		State.Weapon = UnitData->DefaultWeapon;
@@ -56,6 +66,7 @@ void UEquipmentSubsystem::InitializeUnitLoadoutIfMissing(int32 PartyIndex, UUnit
 		State.Armor = UnitData->DefaultArmor;
 	}
 }
+
 
 const FWeaponModSlotDef* UEquipmentSubsystem::FindWeaponSlotDef(const UWeaponDataAsset* Weapon, FName PartSlotKeyOrSocketName) const
 {
@@ -174,8 +185,6 @@ bool UEquipmentSubsystem::CanEquipWeaponPart(int32 PartyIndex, FName PartSlotKey
 	const FName StoredKey = ResolveStoredPartKey(PartyIndex, PartSlotKeyOrSocketName);
 	if (StoredKey == NAME_None)
 	{
-		UE_LOG(LogTemp, Warning, TEXT("[CanEquip] ResolveStoredPartKey returned None. PartyIndex=%d SlotKey=%s (무기/방어구가 장착되지 않았거나 SlotId 불일치)"),
-			PartyIndex, *PartSlotKeyOrSocketName.ToString());
 		return false;
 	}
 
@@ -202,8 +211,32 @@ bool UEquipmentSubsystem::CanEquipWeaponPart(int32 PartyIndex, FName PartSlotKey
 	}
 
 	const UInventorySubsystem* Inv = GetInv();
-	return Inv && Inv->GetQuantity(NewPart) > 0;
+	if (!Inv) return false;
+
+	const int32 InvQuantity = Inv->GetQuantity(NewPart);
+	if (InvQuantity <= 0) return false;
+
+	// 동일 파츠가 모든 슬롯에 장착된 수량 카운트 // 추가됨
+	int32 AlreadyEquippedCount = 0; // 추가됨
+	for (const FUnitEquipmentState& EqState : PartyEquipments) // 추가됨
+	{ // 추가됨
+		for (const TPair<FName, TObjectPtr<UWeaponPartDataAsset>>& Pair : EqState.EquippedParts) // 추가됨
+		{ // 추가됨
+			if (Pair.Value == NewPart) ++AlreadyEquippedCount; // 추가됨
+		} // 추가됨
+	} // 추가됨
+
+	// 현재 슬롯에 이미 같은 파츠가 장착됨 = 재장착 불필요 → false // 수정됨
+	if (const TObjectPtr<UWeaponPartDataAsset>* CurPart = PartyEquipments[PartyIndex].EquippedParts.Find(StoredKey)) // 수정됨
+	{ // 수정됨
+		if (*CurPart == NewPart) return false; // 수정됨 - 같은 슬롯 같은 파츠 → 버튼 비활성화
+		--AlreadyEquippedCount; // 수정됨 - 다른 파츠면 교체 대상이므로 차감
+	} // 수정됨
+
+	return (InvQuantity - AlreadyEquippedCount) > 0; // 수정됨
 }
+
+
 
 
 
@@ -226,7 +259,7 @@ bool UEquipmentSubsystem::EquipWeaponPart(int32 PartyIndex, FName PartSlotKeyOrS
 	UWeaponPartDataAsset* OldPart = GetEquippedPart(PartyIndex, StoredKey);
 	if (OldPart == NewPart)
 	{
-		return true;
+		return false;
 	}
 
 	if (!Inv->RemoveItem(NewPart, 1))
