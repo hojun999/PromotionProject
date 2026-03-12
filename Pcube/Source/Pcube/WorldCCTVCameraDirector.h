@@ -100,7 +100,7 @@ public:
 protected:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Components")
 	TObjectPtr<UCameraComponent> CameraComp;
-
+	
 	/** Target to track (player). */
 	UPROPERTY(Transient)
 	TWeakObjectPtr<AActor> TargetActor;

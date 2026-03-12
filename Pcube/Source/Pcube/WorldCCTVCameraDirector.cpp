@@ -15,6 +15,8 @@ AWorldCCTVCameraDirector::AWorldCCTVCameraDirector()
 
 	CameraComp = CreateDefaultSubobject<UCameraComponent>(TEXT("CameraComp"));
 	RootComponent = CameraComp;
+	
+	
 }
 
 void AWorldCCTVCameraDirector::BeginPlay()
