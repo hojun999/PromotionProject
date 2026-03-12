@@ -31,25 +31,6 @@ ABattleBaseUnit::ABattleBaseUnit()
 	WeaponMeshComp->SetGenerateOverlapEvents(false);
 	WeaponMeshComp->SetVisibility(true, true);
 	WeaponMeshComp->SetHiddenInGame(true, true);
-
-	
-	// ACharacter를 상속받으므로 깁본 skeletalmesh 숨기기
-	// TODO: 이후에 Skeletalmesh 사용할 때 아래 내용 삭제
-	// if (GetMesh())
-	// {
-	// 	GetMesh()->SetHiddenInGame(true);
-	// }
-	
-	// CineCameraArmComp = CreateDefaultSubobject<USpringArmComponent>(TEXT("CineCameraArmComp"));
-	// CineCameraArmComp->SetupAttachment(RootComponent);
-	// CineCameraArmComp->TargetArmLength = 800.0f;
-	// CineCameraArmComp->SetRelativeRotation(FRotator(-30.0f, 45.0f, 0.0f));
-	// CineCameraArmComp->bDoCollisionTest = false;
-	// CineCameraArmComp->bUsePawnControlRotation = false;
-	//
-	// CineCameraComp = CreateDefaultSubobject<UCineCameraComponent>(TEXT("CineCameraComp"));
-	// CineCameraComp->SetupAttachment(CineCameraArmComp, USpringArmComponent::SocketName);
-	// CineCameraComp->CurrentFocalLength = 50.0f;
 	
 	CameraArmComp = CreateDefaultSubobject<USpringArmComponent>(TEXT("CameraArmComp"));
 	CameraArmComp->SetupAttachment(RootComponent);
@@ -63,6 +44,13 @@ ABattleBaseUnit::ABattleBaseUnit()
 	
 	UIAnchorPoint = CreateDefaultSubobject<USceneComponent>(TEXT("UIAnchorPoint"));
 	UIAnchorPoint->SetupAttachment(RootComponent);
+	
+	EnemyHPBarComponent = CreateDefaultSubobject<UWidgetComponent>(TEXT("EnemyHPBarComponent"));
+	EnemyHPBarComponent->SetupAttachment(RootComponent);
+	EnemyHPBarComponent->SetWidgetSpace(EWidgetSpace::Screen);
+	EnemyHPBarComponent->SetDrawSize(FVector2D(200.f, 40.f));
+	EnemyHPBarComponent->SetRelativeLocation(FVector(0.f, 0.f, 150.f));
+	EnemyHPBarComponent->SetVisibility(false); // 기본 숨김, RefreshEnemyHPBar에서 제어
 	
 	DamageTextActorClass = ABattleDamageTextActor::StaticClass();
 }
@@ -200,10 +188,19 @@ void ABattleBaseUnit::RefreshEnemyHPBar()
 	SetEnemyHPBarVisible(bShouldShow);
 	if (!bShouldShow) return;
 
+	// WidgetComponent 위젯은 뷰포트가 아닌 내부 렌더링이라 NativeConstruct 타이밍이 늦을 수 있음
+	// InitWidget()으로 강제 초기화 후 위젯 포인터를 가져옴
+	EnemyHPBarComponent->InitWidget();
+
+	EnemyHPBarComponent->InitWidget(); // WidgetComponent 위젯은 NativeConstruct 타이밍이 늦을 수 있어 강제 초기화
 	if (UBattleEnemyHPBarWidget* HPWidget = Cast<UBattleEnemyHPBarWidget>(EnemyHPBarComponent->GetUserWidgetObject()))
 	{
 		HPWidget->InitForUnitName(UnitData ? UnitData->UnitName : GetName());
 		HPWidget->SetHP(CurrentHP, GetMaxHP());
+	}
+	else
+	{
+		UE_LOG(LogTemp, Warning, TEXT("[HPBar] %s - GetUserWidgetObject() null. WidgetClass 미설정 확인 필요"), *GetName());
 	}
 }
 
@@ -416,12 +413,16 @@ void ABattleBaseUnit::InitUnit(UUnitDataAsset* TransferredUnitData)
 			StaticMeshComp->SetStaticMesh((UnitData->UnitStaticMesh));
 		
 			// 여기서 스케일이나 머티리얼 추가 조정 가능
+
+			// 적군도 초기 HP 브로드캐스트 - 없으면 HPBar 초기화 안 됨 
+			OnHPChanged.Broadcast(CurrentHP, MaxHP); 
 			return;
 		}
 	}
 	
 	
 }
+
 
 void ABattleBaseUnit::FinishAction()
 {

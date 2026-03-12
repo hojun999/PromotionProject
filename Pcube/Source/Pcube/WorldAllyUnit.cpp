@@ -15,16 +15,16 @@ AWorldAllyUnit::AWorldAllyUnit()
 	PartyIndex = 0;
 
 	// 카메라 설정 (쿼터뷰 시점)
-	// PlayerSpringArm = CreateDefaultSubobject<USpringArmComponent>(TEXT("PlayerSpringArm"));
-	// PlayerSpringArm->SetupAttachment(RootComponent);
-	// PlayerSpringArm->TargetArmLength = 700.0f;
-	// PlayerSpringArm->SetRelativeLocation(FVector(25.0f, 0.0f, 50.f));
-	// PlayerSpringArm->SetRelativeRotation(FRotator(-25.0f, 0.0f, 0.0f)); // 시점 고정
-	// PlayerSpringArm->bDoCollisionTest = false; // Collision 충돌 시 카메라 줌인 방지
-	// PlayerSpringArm->bInheritYaw = false; // 컨트롤러 회전에 의한 카메라 회전 영향 방지
-	//
-	// PlayerCamera = CreateDefaultSubobject<UCameraComponent>(TEXT("PlayerCamera"));
-	// PlayerCamera->SetupAttachment(PlayerSpringArm);
+	PlayerSpringArm = CreateDefaultSubobject<USpringArmComponent>(TEXT("PlayerSpringArm"));
+	PlayerSpringArm->SetupAttachment(RootComponent);
+	PlayerSpringArm->TargetArmLength = 700.0f;
+	PlayerSpringArm->SetRelativeLocation(FVector(25.0f, 0.0f, 50.f));
+	PlayerSpringArm->SetRelativeRotation(FRotator(-25.0f, 0.0f, 0.0f)); // 시점 고정
+	PlayerSpringArm->bDoCollisionTest = false; // Collision 충돌 시 카메라 줌인 방지
+	PlayerSpringArm->bInheritYaw = false; // 컨트롤러 회전에 의한 카메라 회전 영향 방지
+	
+	PlayerCamera = CreateDefaultSubobject<UCameraComponent>(TEXT("PlayerCamera"));
+	PlayerCamera->SetupAttachment(PlayerSpringArm);
 	
 	// 캐릭터 회전 설정 (마우스가 아닌 이동 방향으로 회전)
 	bUseControllerRotationYaw = false; // 캐릭터가 카메라 방향을 따라가지 않음
@@ -64,26 +64,42 @@ void AWorldAllyUnit::SetupPlayerInputComponent(UInputComponent* PlayerInputCompo
 
 void AWorldAllyUnit::MoveForward(float Value)
 {
-	if (Controller && Value != 0.f)
+	if (!Controller || Value == 0.f) return;
+
+	// 카메라 컴포넌트의 실제 월드 회전 기준으로 이동 방향 계산
+	// Controller->GetControlRotation()은 초기화 타이밍에 따라 폰 초기 회전을 반환할 수 있어 불안정
+	FRotator CamRot;
+	if (UCameraComponent* Cam = FindComponentByClass<UCameraComponent>())
 	{
-		// 카메라 기준 정면 방향 계산 (Yaw만 추출)
-		const FRotator Rotation = Controller->GetControlRotation();
-		const FRotator YawRotation(0, Rotation.Yaw, 0);
-		const FVector Direction = FRotationMatrix(YawRotation).GetUnitAxis(EAxis::X);
-		
-		AddMovementInput(Direction, Value);
+		CamRot = Cam->GetComponentRotation();
 	}
+	else
+	{
+		CamRot = Controller->GetControlRotation(); // 카메라 없으면 폴백
+	}
+
+	const FRotator YawRotation(0, CamRot.Yaw, 0);
+	const FVector Direction = FRotationMatrix(YawRotation).GetUnitAxis(EAxis::X);
+	AddMovementInput(Direction, Value);
 }
+
 
 void AWorldAllyUnit::MoveRight(float Value)
 {
-	if (Controller && Value != 0.f)
+	if (!Controller || Value == 0.f) return;
+
+	FRotator CamRot;
+	if (UCameraComponent* Cam = FindComponentByClass<UCameraComponent>())
 	{
-		// 카메라 기준 오른쪽 방향 계산
-		const FRotator Rotation = Controller->GetControlRotation();
-		const FRotator YawRotation(0, Rotation.Yaw, 0);
-		const FVector Direction = FRotationMatrix(YawRotation).GetUnitAxis(EAxis::Y);
-		
-		AddMovementInput(Direction, Value);
+		CamRot = Cam->GetComponentRotation();
 	}
+	else
+	{
+		CamRot = Controller->GetControlRotation(); // 카메라 없으면 폴백
+	}
+
+	const FRotator YawRotation(0, CamRot.Yaw, 0);
+	const FVector Direction = FRotationMatrix(YawRotation).GetUnitAxis(EAxis::Y);
+	AddMovementInput(Direction, Value);
 }
+

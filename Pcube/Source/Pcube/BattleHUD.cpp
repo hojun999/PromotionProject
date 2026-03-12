@@ -97,6 +97,28 @@ void ABattleHUD::CreateAllWidgets()
 			VictoryWidget->SetVisibility(ESlateVisibility::Collapsed);
 		}
 	}
+	
+	// Q/E 타겟 변경 힌트 위젯 생성 
+	if (ChangeTargetHintWidgetClass) 
+	{ 
+		DisplayChangeTargetWidget = CreateWidget<UUserWidget>(PC, ChangeTargetHintWidgetClass); 
+		if (DisplayChangeTargetWidget) 
+		{ 
+			DisplayChangeTargetWidget->AddToViewport(20); 
+			DisplayChangeTargetWidget->SetVisibility(ESlateVisibility::Collapsed); 
+		} 
+	} 
+
+	// 우클릭 돌아가기 힌트 위젯 생성 
+	if (CancelHintWidgetClass) 
+	{ 
+		DisplayCancleWidget = CreateWidget<UUserWidget>(PC, CancelHintWidgetClass); 
+		if (DisplayCancleWidget) 
+		{ 
+			DisplayCancleWidget->AddToViewport(20); 
+			DisplayCancleWidget->SetVisibility(ESlateVisibility::Collapsed); 
+		} 
+	} 
 }
 
 void ABattleHUD::BindSubsystemEvents()
@@ -127,6 +149,21 @@ void ABattleHUD::HandleBattleStateChanged(EBattleState NewState)
 	if (NewState == EBattleState::ActionInput || NewState == EBattleState::Finished)
 	{
 		HideActionIntent();
+	}
+	
+	// 타겟 선택 상태 진입 시 Q/E 힌트 표시 
+	if (DisplayChangeTargetWidget) 
+	{ 
+		const bool bShowQE = (NewState == EBattleState::TargetSelection); 
+		DisplayChangeTargetWidget->SetVisibility(bShowQE ? ESlateVisibility::HitTestInvisible : ESlateVisibility::Collapsed); 
+	} 
+
+	// 타겟 선택 / 스킬 리스트 / 아이템 상태에서 우클릭 돌아가기 힌트 표시 
+	if (DisplayCancleWidget)
+	{
+		// 타겟 선택 상태에서만 표시 - ActionInput(액션메뉴 표시 중)일 때는 숨김 
+		const bool bShowCancel = (NewState == EBattleState::TargetSelection);
+		DisplayCancleWidget->SetVisibility(bShowCancel ? ESlateVisibility::HitTestInvisible : ESlateVisibility::Collapsed);
 	}
 }
 
@@ -264,8 +301,12 @@ void ABattleHUD::HandleActionOrderChanged(const TArray<AActor*>& NewOrder)
 
 void ABattleHUD::HandleTargetChanged(AActor* NewTarget)
 {
-	if (!NewTarget) return;
-	// 타겟 강조/하이라이트 연동 지점
+	// 타겟이 있을 때만 Q/E 힌트 표시 유지 
+	if (DisplayChangeTargetWidget) 
+	{ 
+		const ESlateVisibility Vis = NewTarget ? ESlateVisibility::HitTestInvisible : ESlateVisibility::Collapsed; 
+		DisplayChangeTargetWidget->SetVisibility(Vis); 
+	} 
 }
 
 void ABattleHUD::HandleBattleFinished(EBattleResult Result)

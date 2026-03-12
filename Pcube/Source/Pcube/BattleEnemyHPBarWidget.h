@@ -6,8 +6,6 @@
 
 class UProgressBar;
 class UTextBlock;
-class UBorder;
-class UHorizontalBox;
 
 UCLASS()
 class PCUBE_API UBattleEnemyHPBarWidget : public UUserWidget
@@ -15,17 +13,14 @@ class PCUBE_API UBattleEnemyHPBarWidget : public UUserWidget
 	GENERATED_BODY()
 
 public:
-	virtual void NativeConstruct() override;
 	void InitForUnitName(const FString& InName);
 	void SetHP(float CurrentHP, float MaxHP);
 
 private:
-	void EnsureWidgetTreeBuilt();
-
-private:
-	UPROPERTY(Transient)
+	// WBP_BattleEnemyHPBar 디자이너에서 이름을 정확히 맞춰야 바인딩됨
+	UPROPERTY(meta=(BindWidget))
 	TObjectPtr<UProgressBar> HPBar = nullptr;
 
-	UPROPERTY(Transient)
+	UPROPERTY(meta=(BindWidgetOptional))
 	TObjectPtr<UTextBlock> NameText = nullptr;
 };

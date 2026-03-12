@@ -49,6 +49,14 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category="Battle|UI")
 	TSubclassOf<UUserWidget> VictoryWidgetClass;
 	
+	// Q/E 타겟 변경 힌트 위젯 클래스
+	UPROPERTY(EditDefaultsOnly, Category="Battle|UI")
+	TSubclassOf<UUserWidget> ChangeTargetHintWidgetClass;
+
+	// 우클릭 돌아가기 힌트 위젯 클래스
+	UPROPERTY(EditDefaultsOnly, Category="Battle|UI")
+	TSubclassOf<UUserWidget> CancelHintWidgetClass;
+	
 	UPROPERTY(EditAnywhere, Category="Battle|UI")
 	TSubclassOf<class UAllyStatusPanelWidget> AllyStatusPanelClass;
 	

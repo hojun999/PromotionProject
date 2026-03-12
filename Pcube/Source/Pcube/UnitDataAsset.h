@@ -104,6 +104,11 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Battle")
 	TSubclassOf<ABattleBaseUnit> BattleUnitClass;
 	
+	// true면 스폰 시 바닥 레이캐스트 보정을 건너뛰고 SpawnLocation.Z를 그대로 사용
+	// 공중 유닛처럼 특정 고도에 스폰해야 하는 유닛에 사용
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Battle")
+	bool bIsFlightUnit = false;
+	
 	// L_Battle에서 사용할 AnimBP(Idle/피격/사망 기본 StateMachine 포함)
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Visual|Battle")
 	TSubclassOf<UAnimInstance> BattleAnimBlueprintInstance = nullptr;

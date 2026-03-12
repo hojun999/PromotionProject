@@ -6,6 +6,7 @@
 #include "BattleInfoTransferSubsystem.h"
 #include "UnitDataAsset.h"
 #include "EquipmentSubsystem.h"
+#include "Components/CapsuleComponent.h"
 
 void UBattleControlSubsystem::OnWorldBeginPlay(UWorld& InWorld)
 {
@@ -150,10 +151,37 @@ ABattleBaseUnit* UBattleControlSubsystem::SpawningLogic(const FUnitSpawnInfo& Un
 		return nullptr;
 	}
 
-	FTransform SpawnTransform(UnitInfo.SpawnRotation, UnitInfo.SpawnLocation, UnitInfo.SpawnScale);
+	// 비행 유닛은 레이캐스트 보정 없이 SpawnLocation.Z 그대로 사용 
+	FVector AdjustedLocation = UnitInfo.SpawnLocation;
+	if (!UnitDataAsset->bIsFlightUnit) 
+	{
+		const FVector TraceStart = AdjustedLocation + FVector(0.f, 0.f, 500.f);
+		const FVector TraceEnd   = AdjustedLocation - FVector(0.f, 0.f, 500.f);
+		FHitResult HitResult;
+		FCollisionQueryParams QueryParams;
+		QueryParams.bTraceComplex = false;
+		if (World->LineTraceSingleByChannel(HitResult, TraceStart, TraceEnd, ECC_WorldStatic, QueryParams))
+		{
+			AdjustedLocation.Z = HitResult.ImpactPoint.Z;
+			UE_LOG(LogTemp, Warning, TEXT("[SpawnFloor] %s | OriginalZ=%.1f ImpactZ=%.1f HitActor=%s"),
+				*UnitInfo.UnitID, UnitInfo.SpawnLocation.Z, HitResult.ImpactPoint.Z, *GetNameSafe(HitResult.GetActor()));
+		}
+		else
+		{
+			UE_LOG(LogTemp, Warning, TEXT("[SpawnFloor] %s | 레이캐스트 미스 - OriginalZ=%.1f 그대로 사용"),
+				*UnitInfo.UnitID, UnitInfo.SpawnLocation.Z);
+		}
+		UE_LOG(LogTemp, Warning, TEXT("[SpawnFloor] %s | FinalZ=%.1f"), *UnitInfo.UnitID, AdjustedLocation.Z);
+	}
+	else 
+	{ 
+		UE_LOG(LogTemp, Warning, TEXT("[SpawnFloor] %s | FlightUnit - SpawnZ=%.1f 그대로 사용"), *UnitInfo.UnitID, AdjustedLocation.Z); 
+	} 
+
+	FTransform SpawnTransform(UnitInfo.SpawnRotation, AdjustedLocation, UnitInfo.SpawnScale);
 
 	FActorSpawnParameters SpawnParams;
-	SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButAlwaysSpawn;
+	SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn; 
 
 	ABattleBaseUnit* NewUnit = World->SpawnActor<ABattleBaseUnit>(
 		UnitDataAsset->BattleUnitClass,
@@ -167,6 +195,18 @@ ABattleBaseUnit* UBattleControlSubsystem::SpawningLogic(const FUnitSpawnInfo& Un
 		return nullptr;
 	}
 
+	// 지상 유닛만 캡슐 HalfHeight 보정 적용 
+	if (!UnitDataAsset->bIsFlightUnit) 
+	{
+		if (UCapsuleComponent* Capsule = NewUnit->GetCapsuleComponent()) 
+		{
+			const float HalfHeight = Capsule->GetScaledCapsuleHalfHeight(); 
+			AdjustedLocation.Z += HalfHeight; 
+			NewUnit->SetActorLocation(AdjustedLocation, false, nullptr, ETeleportType::TeleportPhysics); 
+			UE_LOG(LogTemp, Warning, TEXT("[SpawnFloor] %s | HalfHeight=%.1f FinalZ=%.1f"), *UnitInfo.UnitID, HalfHeight, AdjustedLocation.Z); 
+		}
+	} 
+
 	// 초기화
 	NewUnit->InitUnit(UnitDataAsset);
 
@@ -178,6 +218,7 @@ ABattleBaseUnit* UBattleControlSubsystem::SpawningLogic(const FUnitSpawnInfo& Un
 
 	return NewUnit;
 }
+
 
 
 void UBattleControlSubsystem::OnBattleSetupFinished()

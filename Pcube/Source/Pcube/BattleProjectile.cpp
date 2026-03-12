@@ -18,10 +18,11 @@ ABattleProjectile::ABattleProjectile()
 	CollisionComp->OnComponentBeginOverlap.AddDynamic(this, &ABattleProjectile::OnOverlap);
 	
 	MoveComp = CreateDefaultSubobject<UProjectileMovementComponent>(TEXT("MoveComp"));
-	MoveComp->InitialSpeed = 2000.f;
+	MoveComp->InitialSpeed = 0.f; // BeginPlay에서 즉시 이동 방지, InitProjectile에서 활성화
 	MoveComp->MaxSpeed = 2000.f;
 	MoveComp->bRotationFollowsVelocity = true;
 	MoveComp->bShouldBounce = false;
+	MoveComp->SetAutoActivate(false); // InitProjectile 전까지 이동 비활성화
 	
 	InitialLifeSpan = 3.0f; // 너무 오래 남는 문제 방지
 }
@@ -50,6 +51,14 @@ void ABattleProjectile::InitProjectile(ABattleBaseUnit* InSource, ABattleBaseUni
 		MoveComp->bIsHomingProjectile = true;
 		MoveComp->HomingTargetComponent = TargetUnit->GetRootComponent();
 		MoveComp->HomingAccelerationMagnitude = 8000.f;
+	}
+	
+	// 타겟/호밍 설정 완료 후 이동 활성화
+	if (MoveComp)
+	{
+		MoveComp->InitialSpeed = 2000.f;
+		MoveComp->Velocity = GetActorForwardVector() * MoveComp->InitialSpeed;
+		MoveComp->Activate(true); // 이제 이동 시작
 	}
 }
 
