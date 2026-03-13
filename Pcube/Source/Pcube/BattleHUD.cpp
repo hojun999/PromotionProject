@@ -97,7 +97,7 @@ void ABattleHUD::CreateAllWidgets()
 			VictoryWidget->SetVisibility(ESlateVisibility::Collapsed);
 		}
 	}
-	
+
 	// Q/E 타겟 변경 힌트 위젯 생성 
 	if (ChangeTargetHintWidgetClass) 
 	{ 
@@ -120,6 +120,7 @@ void ABattleHUD::CreateAllWidgets()
 		} 
 	} 
 }
+
 
 void ABattleHUD::BindSubsystemEvents()
 {
@@ -150,22 +151,23 @@ void ABattleHUD::HandleBattleStateChanged(EBattleState NewState)
 	{
 		HideActionIntent();
 	}
-	
-	// 타겟 선택 상태 진입 시 Q/E 힌트 표시 
+
+	// 타겟 선택 상태 진입 시 Q/E 힌트 표시 (살아있는 적 2개 이상일 때만) 
 	if (DisplayChangeTargetWidget) 
 	{ 
-		const bool bShowQE = (NewState == EBattleState::TargetSelection); 
+		const bool bShowQE = (NewState == EBattleState::TargetSelection) && HasMultipleAliveEnemies(); 
 		DisplayChangeTargetWidget->SetVisibility(bShowQE ? ESlateVisibility::HitTestInvisible : ESlateVisibility::Collapsed); 
 	} 
 
 	// 타겟 선택 / 스킬 리스트 / 아이템 상태에서 우클릭 돌아가기 힌트 표시 
-	if (DisplayCancleWidget)
-	{
+	if (DisplayCancleWidget) 
+	{ 
 		// 타겟 선택 상태에서만 표시 - ActionInput(액션메뉴 표시 중)일 때는 숨김 
-		const bool bShowCancel = (NewState == EBattleState::TargetSelection);
-		DisplayCancleWidget->SetVisibility(bShowCancel ? ESlateVisibility::HitTestInvisible : ESlateVisibility::Collapsed);
-	}
+		const bool bShowCancel = (NewState == EBattleState::TargetSelection); 
+		DisplayCancleWidget->SetVisibility(bShowCancel ? ESlateVisibility::HitTestInvisible : ESlateVisibility::Collapsed); 
+	} 
 }
+
 
 void ABattleHUD::HandleBattleUnitSpawned(const TArray<AActor*>& Allies, const TArray<AActor*>& Enemies)
 {
@@ -301,13 +303,24 @@ void ABattleHUD::HandleActionOrderChanged(const TArray<AActor*>& NewOrder)
 
 void ABattleHUD::HandleTargetChanged(AActor* NewTarget)
 {
-	// 타겟이 있을 때만 Q/E 힌트 표시 유지 
 	if (DisplayChangeTargetWidget) 
 	{ 
-		const ESlateVisibility Vis = NewTarget ? ESlateVisibility::HitTestInvisible : ESlateVisibility::Collapsed; 
-		DisplayChangeTargetWidget->SetVisibility(Vis); 
+		// 타겟이 있고 살아있는 적이 2개 이상일 때만 QE 힌트 표시 
+		const bool bShowQE = NewTarget && HasMultipleAliveEnemies(); 
+		DisplayChangeTargetWidget->SetVisibility(bShowQE ? ESlateVisibility::HitTestInvisible : ESlateVisibility::Collapsed); 
 	} 
 }
+
+bool ABattleHUD::HasMultipleAliveEnemies() const 
+{ 
+	UWorld* World = GetWorld(); 
+	if (!World) return false; 
+
+	UBattleControlSubsystem* Sub = World->GetSubsystem<UBattleControlSubsystem>(); 
+	if (!Sub) return false; 
+
+	return Sub->GetAliveUnitCount(Sub->SpawnedEnemies) >= 2; 
+} 
 
 void ABattleHUD::HandleBattleFinished(EBattleResult Result)
 {

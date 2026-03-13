@@ -19,7 +19,7 @@ class PCUBE_API UEquipPartsSlotWidget : public UUserWidget
 public:
 	// InQuantity: 인벤토리 보유 수량. 0이면 비활성(어둡게) 표시.
 	UFUNCTION(BlueprintCallable)
-	void Init(UWeaponPartDataAsset* InPart, int32 InQuantity);
+	void Init(UWeaponPartDataAsset* InPart, int32 InQuantity, bool bCanEquip = true);
 
 	UPROPERTY(BlueprintAssignable)
 	FOnEquipPartsSlotClicked OnClicked;
@@ -35,7 +35,7 @@ private:
 	UFUNCTION()
 	void HandleClicked();
 
-	void ApplyAvailability(bool bAvailable);
+	//void ApplyAvailability(bool bAvailable);
 
 private:
 	UPROPERTY(meta=(BindWidget))

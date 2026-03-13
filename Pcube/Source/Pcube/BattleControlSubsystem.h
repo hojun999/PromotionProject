@@ -117,6 +117,11 @@ public:
 	
 	void FinishBattle(EBattleResult Result);
 	
+	int32 GetAliveUnitCount(const TArray<AActor*>& UnitList);
+	
+	// 현재 전투에 참여 중인 적 유닛들을 담는 배열 (턴 관리용)
+	UPROPERTY()
+	TArray<AActor*> SpawnedEnemies;
 	
 protected:
 	void HandleEnemyAI(ABattleBaseUnit* EnemyUnit);
@@ -128,10 +133,6 @@ protected:
 	
 	AActor* CurrentActionUnit;
 	
-	// 현재 전투에 참여 중인 적 유닛들을 담는 배열 (턴 관리용)
-	UPROPERTY()
-	TArray<AActor*> SpawnedEnemies;
-	
 	// 현재 전투에 참여 중인 플레이어 유닛들을 담는 배열
 	UPROPERTY()
 	TArray<AActor*> SpawnedAllies;
@@ -140,7 +141,7 @@ private:
 	// 유닛 스폰의 공통적인 부분을 담당하는 함수
 	ABattleBaseUnit* SpawningLogic(const FUnitSpawnInfo& UnitInfo);
 	
-	int32 GetAliveUnitCount(const TArray<AActor*>& UnitList);
+	
 	
 	void RebuildAvailableTargetsByRule();
 	const TArray<AActor*>& GetFriendlyUnitsFor(const ABattleBaseUnit* ActingUnit) const;

@@ -10,22 +10,23 @@
 
 class UWeaponPartDataAsset;
 
+// 슬롯에 장착 가능한 파츠 후보 항목 (DA에서 직접 지정)
 USTRUCT(BlueprintType)
 struct FWeaponPartSlotEntry
 {
 	GENERATED_BODY()
 	
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Part")
-	TSoftObjectPtr<UWeaponPartDataAsset> Part;
+	TSoftObjectPtr<UWeaponPartDataAsset> Part = nullptr;
 
 	// 일러스트 위 캔버스 기준 앵커 (0~1)
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="UI", meta=(ClampMin="0.0", ClampMax="1.0"))
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Part|UI", meta=(ClampMin="0.0", ClampMax="1.0"))
 	FVector2D UIAnchor = FVector2D(0.5f, 0.5f);
 
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="UI")
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Part|UI")
 	FVector2D UIPixelOffset = FVector2D(0.f, 0.f);
 
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="UI")
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Part|UI")
 	FVector2D UISize = FVector2D(56.f, 56.f);
 };
 

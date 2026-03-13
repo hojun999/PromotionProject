@@ -104,6 +104,9 @@ protected:
 	UFUNCTION()
 	void HandleTargetChanged(AActor* NewTarget);
 
+	// 살아있는 적이 2개 이상인지 확인 (QE 힌트 표시 조건)
+	bool HasMultipleAliveEnemies() const;
+	
 	UFUNCTION()
 	void HandleBattleFinished(EBattleResult Result);
 	

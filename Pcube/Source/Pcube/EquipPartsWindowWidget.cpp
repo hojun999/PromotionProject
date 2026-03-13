@@ -246,20 +246,24 @@ void UEquipPartsWindowWidget::RebuildCandidateCanvas()
 	// 모든 슬롯의 CandidateParts를 한꺼번에 표시
 	for (const FWeaponModSlotDef& Def : *Slots)
 	{
+		// 이 슬롯에 현재 장착된 파츠 
+		UWeaponPartDataAsset* EquippedPart = EquipmentSubsystem->GetEquippedPart(PartyIndex, Def.SlotId); 
+
 		for (const FWeaponPartSlotEntry& Entry : Def.CandidateParts)
 		{
 			UWeaponPartDataAsset* Part = Entry.Part.LoadSynchronous();
 			if (!Part) continue;
 
-			// GetQuantity로 직접 조회 (포인터 불일치 방지)
 			const int32 InvQty = InventorySubsystem->GetQuantity(Part);
 
-			UE_LOG(LogTemp, Warning, TEXT("[EquipParts] Part=%s Ptr=%p InvQty=%d"), *GetNameSafe(Part), Part, InvQty);
-			
+			// 이미 이 슬롯에 장착된 파츠면 비활성화, 인벤에 없어도 비활성화 
+			const bool bAlreadyEquipped = (EquippedPart == Part); 
+			const bool bCanEquip = !bAlreadyEquipped && (InvQty > 0); 
+
 			UEquipPartsSlotWidget* CandidateWidget = CreateWidget<UEquipPartsSlotWidget>(GetOwningPlayer(), PartCandidateWidgetClass);
 			if (!CandidateWidget) continue;
 
-			CandidateWidget->Init(Part, InvQty);
+			CandidateWidget->Init(Part, InvQty, bCanEquip); 
 			CandidateWidget->OnClicked.RemoveDynamic(this, &UEquipPartsWindowWidget::HandlePartCandidateClicked);
 			CandidateWidget->OnClicked.AddDynamic(this, &UEquipPartsWindowWidget::HandlePartCandidateClicked);
 

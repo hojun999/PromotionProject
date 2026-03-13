@@ -16,11 +16,10 @@ void UEquipPartsSlotWidget::NativeConstruct()
 	}
 }
 
-void UEquipPartsSlotWidget::Init(UWeaponPartDataAsset* InPart, int32 InQuantity)
+void UEquipPartsSlotWidget::Init(UWeaponPartDataAsset* InPart, int32 InQuantity, bool bCanEquip) // 수정됨
 {
 	Part = InPart;
 	Quantity = InQuantity;
-	const bool bAvailableVal = (Part != nullptr && Quantity > 0);
 
 	if (Img_Icon)
 	{
@@ -33,7 +32,6 @@ void UEquipPartsSlotWidget::Init(UWeaponPartDataAsset* InPart, int32 InQuantity)
 		{
 			Img_Icon->SetVisibility(ESlateVisibility::Hidden);
 		}
-		Img_Icon->SetRenderOpacity(bAvailableVal ? 1.f : 0.35f);
 	}
 
 	if (Text_Name)
@@ -43,21 +41,16 @@ void UEquipPartsSlotWidget::Init(UWeaponPartDataAsset* InPart, int32 InQuantity)
 
 	if (Text_Count)
 	{
-		// 수량 0이면 "없음", 있으면 수량 표시
-		const FString CountStr = bAvailableVal
-			? FString::Printf(TEXT("x%d"), Quantity)
-			: TEXT("없음");
-		Text_Count->SetText(FText::FromString(CountStr));
+		Text_Count->SetText(FText::FromString(FString::Printf(TEXT("x%d"), FMath::Max(1, Quantity))));
 	}
 
 	if (Btn_Root)
 	{
-		Btn_Root->SetIsEnabled(bAvailableVal);
-		UE_LOG(LogTemp, Warning, TEXT("[SlotWidget] Init Part=%s Qty=%d bAvailable=%d IsEnabled=%d"),
-	*GetNameSafe(Part), Quantity, bAvailableVal ? 1 : 0, Btn_Root->GetIsEnabled() ? 1 : 0);
+		Btn_Root->SetIsEnabled(Part != nullptr && bCanEquip); // 수정됨
+		Btn_Root->SetRenderOpacity(bCanEquip ? 1.f : 0.4f); // 수정됨 - 비활성화 시 흐려짐
 	}
-	
 }
+
 
 void UEquipPartsSlotWidget::HandleClicked()
 {
