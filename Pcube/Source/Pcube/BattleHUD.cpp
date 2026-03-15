@@ -11,12 +11,25 @@
 #include "ItemDataAsset.h"
 #include "SkillDataAsset.h"
 #include "Blueprint/UserWidget.h"
+#include "AudioManagerSubsystem.h"
+#include "Kismet/GameplayStatics.h"
 
 void ABattleHUD::BeginPlay()
 {
 	Super::BeginPlay();
 	UE_LOG(LogTemp, Warning, TEXT("BattleHUD: BeginPlay Started"));
-	
+
+	if (BattleBGMSound)
+	{
+		if (UGameInstance* GI = GetGameInstance())
+		{
+			if (UAudioManagerSubsystem* AM = GI->GetSubsystem<UAudioManagerSubsystem>())
+			{
+				AM->PlayBGM(BattleBGMSound);
+			}
+		}
+	}
+
 	CreateAllWidgets();
 	BindSubsystemEvents();
 	
@@ -98,6 +111,17 @@ void ABattleHUD::CreateAllWidgets()
 		}
 	}
 
+	// 게임 클리어 위젯 생성 // 추가됨
+	if (GameClearWidgetClass)
+	{
+		GameClearWidget = CreateWidget<UUserWidget>(PC, GameClearWidgetClass);
+		if (GameClearWidget)
+		{
+			GameClearWidget->AddToViewport(200);
+			GameClearWidget->SetVisibility(ESlateVisibility::Collapsed);
+		}
+	}
+	
 	// Q/E 타겟 변경 힌트 위젯 생성 
 	if (ChangeTargetHintWidgetClass) 
 	{ 
@@ -112,11 +136,11 @@ void ABattleHUD::CreateAllWidgets()
 	// 우클릭 돌아가기 힌트 위젯 생성 
 	if (CancelHintWidgetClass) 
 	{ 
-		DisplayCancleWidget = CreateWidget<UUserWidget>(PC, CancelHintWidgetClass); 
-		if (DisplayCancleWidget) 
+		DisplayCancelWidget = CreateWidget<UUserWidget>(PC, CancelHintWidgetClass); 
+		if (DisplayCancelWidget) 
 		{ 
-			DisplayCancleWidget->AddToViewport(20); 
-			DisplayCancleWidget->SetVisibility(ESlateVisibility::Collapsed); 
+			DisplayCancelWidget->AddToViewport(20); 
+			DisplayCancelWidget->SetVisibility(ESlateVisibility::Collapsed); 
 		} 
 	} 
 }
@@ -152,21 +176,23 @@ void ABattleHUD::HandleBattleStateChanged(EBattleState NewState)
 		HideActionIntent();
 	}
 
-	// 타겟 선택 상태 진입 시 Q/E 힌트 표시 (살아있는 적 2개 이상일 때만) 
-	if (DisplayChangeTargetWidget) 
-	{ 
-		const bool bShowQE = (NewState == EBattleState::TargetSelection) && HasMultipleAliveEnemies(); 
-		DisplayChangeTargetWidget->SetVisibility(bShowQE ? ESlateVisibility::HitTestInvisible : ESlateVisibility::Collapsed); 
-	} 
+	// 타겟 선택 상태 진입 시 Q/E/F 힌트 표시 (살아있는 적 2개 이상일 때만) 
+	// 아군 턴 여부 확인
+	const bool bIsAllyTurn = IsValid(CurrentTurnUnit) && CurrentTurnUnit->IsA<ABattleAllyUnit>();
 
-	// 타겟 선택 / 스킬 리스트 / 아이템 상태에서 우클릭 돌아가기 힌트 표시 
-	if (DisplayCancleWidget) 
-	{ 
-		// 타겟 선택 상태에서만 표시 - ActionInput(액션메뉴 표시 중)일 때는 숨김 
-		const bool bShowCancel = (NewState == EBattleState::TargetSelection); 
-		DisplayCancleWidget->SetVisibility(bShowCancel ? ESlateVisibility::HitTestInvisible : ESlateVisibility::Collapsed); 
-	} 
+	if (DisplayChangeTargetWidget)
+	{
+		const bool bShowQE = bIsAllyTurn && (NewState == EBattleState::TargetSelection) && HasMultipleAliveEnemies();
+		DisplayChangeTargetWidget->SetVisibility(bShowQE ? ESlateVisibility::HitTestInvisible : ESlateVisibility::Collapsed);
+	}
+
+	if (DisplayCancelWidget)
+	{
+		const bool bShowCancel = bIsAllyTurn && (NewState == EBattleState::TargetSelection);
+		DisplayCancelWidget->SetVisibility(bShowCancel ? ESlateVisibility::HitTestInvisible : ESlateVisibility::Collapsed);
+	}
 }
+
 
 
 void ABattleHUD::HandleBattleUnitSpawned(const TArray<AActor*>& Allies, const TArray<AActor*>& Enemies)
@@ -195,6 +221,7 @@ void ABattleHUD::HandleBattleUnitSpawned(const TArray<AActor*>& Allies, const TA
 
 void ABattleHUD::HandleTurnUnitChanged(ABattleBaseUnit* ActiveUnit)
 {
+	CurrentTurnUnit = ActiveUnit;
 	HideActionIntent();
 
 	if (!BattleActionMenuWidget || !ActiveUnit) return;
@@ -218,12 +245,6 @@ void ABattleHUD::HandleTurnUnitChanged(ABattleBaseUnit* ActiveUnit)
 		{
 			AllyStatusPanelWidget->SetActiveUnit(nullptr);
 		}
-
-		// 적 턴이면 메뉴 숨기기
-		// if (BattleActionMenuWidget)
-		// {
-		// 	BattleActionMenuWidget->SetVisibility(ESlateVisibility::Collapsed);
-		// }
 	}
 }
 
@@ -287,6 +308,20 @@ void ABattleHUD::ShowVictoryUI()
 	if (VictoryWidget) VictoryWidget->SetVisibility(ESlateVisibility::Visible);
 }
 
+void ABattleHUD::ShowGameClearUI()
+{
+	HideActionIntent();
+	if (GameClearWidget)
+	{
+		GameClearWidget->SetVisibility(ESlateVisibility::Visible);
+	}
+	else
+	{
+		// GameClearWidgetClass 미할당 시 로그 출력
+		UE_LOG(LogTemp, Warning, TEXT("[BattleHUD] GameClearWidget is null - assign GameClearWidgetClass in BP"));
+	}
+}
+
 void ABattleHUD::HandleActionOrderChanged(const TArray<AActor*>& NewOrder)
 {
 	UE_LOG(LogTemp, Warning, TEXT("BattleHUD: HandleActionOrderChanged Called! Unit Count: %d"), NewOrder.Num());
@@ -303,12 +338,13 @@ void ABattleHUD::HandleActionOrderChanged(const TArray<AActor*>& NewOrder)
 
 void ABattleHUD::HandleTargetChanged(AActor* NewTarget)
 {
-	if (DisplayChangeTargetWidget) 
-	{ 
-		// 타겟이 있고 살아있는 적이 2개 이상일 때만 QE 힌트 표시 
-		const bool bShowQE = NewTarget && HasMultipleAliveEnemies(); 
-		DisplayChangeTargetWidget->SetVisibility(bShowQE ? ESlateVisibility::HitTestInvisible : ESlateVisibility::Collapsed); 
-	} 
+	if (DisplayChangeTargetWidget)
+	{
+		// 아군 턴 + 타겟 있음 + 살아있는 적 2개 이상일 때만 표시
+		const bool bIsAllyTurn = IsValid(CurrentTurnUnit) && CurrentTurnUnit->IsA<ABattleAllyUnit>();
+		const bool bShowQE = bIsAllyTurn && NewTarget && HasMultipleAliveEnemies();
+		DisplayChangeTargetWidget->SetVisibility(bShowQE ? ESlateVisibility::HitTestInvisible : ESlateVisibility::Collapsed);
+	}
 }
 
 bool ABattleHUD::HasMultipleAliveEnemies() const 
@@ -325,6 +361,15 @@ bool ABattleHUD::HasMultipleAliveEnemies() const
 void ABattleHUD::HandleBattleFinished(EBattleResult Result)
 {
 	HideActionMenu();
+
+	// 전투 종료 시 BGM 정지 - 월드 복귀 후 WorldHUD가 PlayBGM 호출
+	if (UGameInstance* GI = GetGameInstance())
+	{
+		if (UAudioManagerSubsystem* AM = GI->GetSubsystem<UAudioManagerSubsystem>())
+		{
+			AM->StopBGM(1.0f);
+		}
+	}
 
 	if (Result == EBattleResult::Victory)
 	{

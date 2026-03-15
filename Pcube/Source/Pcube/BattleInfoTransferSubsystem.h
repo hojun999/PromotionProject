@@ -19,12 +19,16 @@ struct FPartyMemberRuntimeState
 {
 	GENERATED_BODY()
 	
-	
 	UPROPERTY()
 	float SavedHP = -1.f;	// -1이면 저장된 값 없음 -> 풀피로 스폰
 	
 	UPROPERTY()
+	float SavedMaxHP = -1.f; // 직전 MaxHP - 장비 변경 시 CurHP 증가분 계산용
+	
+	UPROPERTY()
 	int32 SavedSP = -1;		// -1이면 저장값 없음 -> BaseSkillPoints로 스폰
+	
+	
 };
 
 USTRUCT(BlueprintType)
@@ -100,7 +104,22 @@ public:
 	void InitEnemyBattleInfo(const TArray<FUnitSpawnInfo>& NewSpawnEnemies);
 	
 	// World Level에서 전투 진입 직전에 호출
-	void SetPendingEncounter(FName EncounterID, FName ReturnWorldLevel);
+	void SetPendingEncounter(FName EncounterID, FName ReturnWorldLevel, bool bInIsBossEncounter = false);
+	
+	bool IsBossEncounter() const { return bIsBossEncounter; }
+	
+	// 최초 Settings 표시 여부
+	bool HasShownInitialSettings() const { return bHasShownInitialSettings; }
+	void MarkInitialSettingsShown() { bHasShownInitialSettings = true; }
+	
+	// 전투 시작 전 적 월드 트랜스폼 저장/조회
+	void SetEnemyWorldTransform(const FTransform& InTransform) { EnemyWorldTransform = InTransform; bHasEnemyTransform = true; }
+	bool TryGetEnemyWorldTransform(FTransform& OutTransform) const
+	{
+		if (!bHasEnemyTransform) return false;
+		OutTransform = EnemyWorldTransform; return true;
+	}
+	void ClearEnemyWorldTransform() { bHasEnemyTransform = false; }
 	
 	UFUNCTION(BlueprintCallable)
 	void SetReturnPoint(FName SourceWorldLevel, const FVector& Loc, const FRotator& Rot);
@@ -123,6 +142,8 @@ public:
 	void EnsureAllyRuntimeSize(int32 Num);
 	float GetSavedHP(int32 PartyIndex) const;
 	void SetSavedHP(int32 PartyIndex, float NewHP);
+	float GetSavedMaxHP(int32 PartyIndex) const;
+	void SetSavedMaxHP(int32 PartyIndex, float NewMaxHP);
 	
 	UFUNCTION(BlueprintCallable)
 	void ClearPendingEncounter();
@@ -135,6 +156,13 @@ public:
 	UPROPERTY()
 	TArray<FPartyMemberRuntimeState> AllyRuntimeStates;
 
+	// 파티 UnitData 영구 보존 - AlliesToSpawn과 달리 전투 후에도 유지됨 
+	UPROPERTY()
+	TArray<TSoftObjectPtr<UUnitDataAsset>> PartyUnitDataList; 
+
+	// 파티 정보 접근 
+	UUnitDataAsset* GetPartyUnitData(int32 PartyIndex) const; 
+	int32 GetPartyCount() const { return PartyUnitDataList.Num(); } 
 	
 private:
 	UPROPERTY()
@@ -170,4 +198,16 @@ private:
 	
 	UPROPERTY()
 	FPendingLootConfig PendingLootConfig;
+	
+	// 현재 전투가 보스 전투인지
+	UPROPERTY()
+	bool bIsBossEncounter = false;
+	
+	// 최초 1회 Settings 위젯 표시 여부
+	UPROPERTY()
+	bool bHasShownInitialSettings = false;
+	
+	// 전투 시작 전 적 월드 트랜스폼
+	FTransform EnemyWorldTransform;
+	bool bHasEnemyTransform = false;
 };

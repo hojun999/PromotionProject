@@ -24,17 +24,13 @@ struct FUnitEquipmentState
 	UPROPERTY()
 	TObjectPtr<UWeaponDataAsset> Weapon = nullptr;
 
+	// 방어구는 여러 개 지원
 	UPROPERTY()
-	TObjectPtr<UArmorDataAsset> Armor = nullptr;
+	TMap<FName, TObjectPtr<UArmorDataAsset>> Armors;
 
 	// 현재는 부품 슬롯 키(SlotId) -> 장착 파츠로 저장
 	UPROPERTY()
 	TMap<FName, TObjectPtr<UWeaponPartDataAsset>> EquippedParts;
-	
-	// 이 장비 상태가 어떤 UnitData 기준으로 초기화됐는지 추적 // 추가됨
-	// UnitData가 바뀌면 장비를 리셋해서 DefaultWeapon으로 재초기화 // 추가됨
-	UPROPERTY() // 추가됨
-	TObjectPtr<UUnitDataAsset> SourceUnitData = nullptr; // 추가됨
 };
 
 UCLASS()
@@ -61,7 +57,10 @@ public:
 	UWeaponDataAsset* GetEquippedWeapon(int32 PartyIndex) const;
 
 	UFUNCTION(BlueprintCallable)
-	UArmorDataAsset* GetEquippedArmor(int32 PartyIndex) const;
+	UArmorDataAsset* GetEquippedArmor(int32 PartyIndex, FName ArmorID) const; // ArmorID로 조회
+	
+	const TMap<FName, TObjectPtr<UArmorDataAsset>>* GetAllEquippedArmors(int32 PartyIndex) const;
+
 	
 	UFUNCTION(BlueprintCallable)
 	UWeaponPartDataAsset* GetEquippedPart(int32 PartyIndex, FName PartSlotKeyOrSocketName) const;
@@ -80,15 +79,6 @@ public:
 	
 	UFUNCTION(BlueprintCallable)
 	FWeaponPartEffect GetTotalWeaponPartEffect(int32 PartyIndex) const { return GetTotalEquippedPartEffect(PartyIndex); }
-	
-	// UFUNCTION(BlueprintCallable)
-	// bool IsPartCompatibleWithWeapon(UWeaponDataAsset* Weapon, FName SlotSocketName, const UWeaponPartDataAsset* Part) const;
-
-	// 장비 기본 스탯 합산(무기 + 방어구)
-	
-	// 기존 호출부 호환용. 현재는 무기/방어구 장착 파츠 전체 합산을 반환한다.
-	// UFUNCTION(BlueprintCallable)
-	// FWeaponPartEffect GetTotalWeaponPartEffect(int32 PartyIndex) const;
 
 	UFUNCTION(BlueprintCallable)
 	FEquipmentStatBonus GetTotalEquipmentBaseStatBonus(int32 PartyIndex) const;

@@ -12,7 +12,7 @@
 AWorldAllyUnit::AWorldAllyUnit()
 {
 	// 월드에서 조작하는 플레이어는 기본적으로 파티 0번으로 간주
-	PartyIndex = 0;
+	PartyIndex = 1;
 
 	// 카메라 설정 (쿼터뷰 시점)
 	PlayerSpringArm = CreateDefaultSubobject<USpringArmComponent>(TEXT("PlayerSpringArm"));

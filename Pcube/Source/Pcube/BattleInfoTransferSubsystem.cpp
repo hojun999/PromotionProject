@@ -44,6 +44,7 @@ void UBattleInfoTransferSubsystem::InitializeDefaultAllyParty(UAllyPartyDataAsse
 	if (!DefaultAllyPartyData) return;
 
 	BattleInfo.AlliesToSpawn.Empty();
+	PartyUnitDataList.Empty();
     
 	// 데이터 에셋에 등록된 멤버들을 FUnitSpawnInfo 구조체로 변환
 	for (const FUnitSpawnInfo& MemberInfo : DefaultAllyPartyData->DefaultPartyMembers)
@@ -54,18 +55,20 @@ void UBattleInfoTransferSubsystem::InitializeDefaultAllyParty(UAllyPartyDataAsse
 			continue;
 		}
 		BattleInfo.AlliesToSpawn.Add(MemberInfo);
+		PartyUnitDataList.Add(MemberInfo.UnitDataAsset);
 	}
 	
 	EnsureAllyRuntimeSize(BattleInfo.AlliesToSpawn.Num());
 }
 
-void UBattleInfoTransferSubsystem::SetPendingEncounter(FName EncounterID, FName ReturnWorldLevel)
+void UBattleInfoTransferSubsystem::SetPendingEncounter(FName EncounterID, FName ReturnWorldLevel, bool bInIsBossEncounter)
 {
 	PendingEncounter.EncounterID = EncounterID;
 	PendingEncounter.ReturnWorldLevel = ReturnWorldLevel;
+	bIsBossEncounter = bInIsBossEncounter;
 	
-	UE_LOG(LogTemp, Warning, TEXT("[Encounter] Pending set: %s return=%s"),
-		*EncounterID.ToString(), *ReturnWorldLevel.ToString());
+	UE_LOG(LogTemp, Warning, TEXT("[Encounter] Pending set: %s return=%s boss=%d"),
+		*EncounterID.ToString(), *ReturnWorldLevel.ToString(), bInIsBossEncounter ? 1 : 0);
 }
 
 void UBattleInfoTransferSubsystem::SetReturnPoint(FName SourceWorldLevel, const FVector& Loc, const FRotator& Rot)
@@ -166,6 +169,17 @@ void UBattleInfoTransferSubsystem::SetSavedHP(int32 PartyIndex, float NewHP)
 {
 	EnsureAllyRuntimeSize(PartyIndex + 1);
 	AllyRuntimeStates[PartyIndex].SavedHP = NewHP;
+}
+
+float UBattleInfoTransferSubsystem::GetSavedMaxHP(int32 PartyIndex) const // 추가됨
+{
+	return AllyRuntimeStates.IsValidIndex(PartyIndex) ? AllyRuntimeStates[PartyIndex].SavedMaxHP : -1.f;
+}
+
+void UBattleInfoTransferSubsystem::SetSavedMaxHP(int32 PartyIndex, float NewMaxHP) // 추가됨
+{
+	EnsureAllyRuntimeSize(PartyIndex + 1);
+	AllyRuntimeStates[PartyIndex].SavedMaxHP = NewMaxHP;
 }
 
 int32 UBattleInfoTransferSubsystem::GetSavedSP(int32 PartyIndex) const
@@ -318,3 +332,9 @@ TArray<FLootStack> UBattleInfoTransferSubsystem::GenerateLootFromPendingConfig(i
 
 	return Result;
 }
+
+UUnitDataAsset* UBattleInfoTransferSubsystem::GetPartyUnitData(int32 PartyIndex) const 
+{ 
+	if (!PartyUnitDataList.IsValidIndex(PartyIndex)) return nullptr; 
+	return PartyUnitDataList[PartyIndex].LoadSynchronous(); 
+} 

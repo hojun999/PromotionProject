@@ -39,8 +39,6 @@ void UPlayerInfoWindowWidget::NativeConstruct()
 		EquipmentSubsystem->OnEquipmentChanged.AddDynamic(this, &UPlayerInfoWindowWidget::HandleEquipmentChanged);
 	}
 
-	//EnsureDefaultWeaponsInitialized();
-
 	if (Btn_Ally0)
 	{
 		Btn_Ally0->OnClicked.RemoveDynamic(this, &UPlayerInfoWindowWidget::HandleAlly0Clicked);
@@ -90,9 +88,7 @@ void UPlayerInfoWindowWidget::NativeDestruct()
 
 void UPlayerInfoWindowWidget::Open()
 {
-	//EnsureDefaultWeaponsInitialized();
 	SetVisibility(ESlateVisibility::Visible);
-	EnsureSelectedLoadoutInitialized();
 	RefreshPortraitButtons();
 	SelectPartyMember(SelectedPartyIndex);
 }
@@ -116,29 +112,30 @@ void UPlayerInfoWindowWidget::Close()
 int32 UPlayerInfoWindowWidget::GetPartyCount() const
 {
 	if (!TransferSubsystem) return 0;
-	return TransferSubsystem->BattleInfo.AlliesToSpawn.Num();
+	return TransferSubsystem->GetPartyCount(); // AlliesToSpawn 대신 영구 보존 리스트 사용
 }
+
 
 UUnitDataAsset* UPlayerInfoWindowWidget::GetPartyUnitData(int32 PartyIndex) const
 {
 	if (!TransferSubsystem) return nullptr;
-	if (!TransferSubsystem->BattleInfo.AlliesToSpawn.IsValidIndex(PartyIndex)) return nullptr;
-
-	const TSoftObjectPtr<UUnitDataAsset> Soft = TransferSubsystem->BattleInfo.AlliesToSpawn[PartyIndex].UnitDataAsset;
-	if (Soft.IsNull()) return nullptr;
-
-	return Soft.LoadSynchronous();
+	return TransferSubsystem->GetPartyUnitData(PartyIndex); // AlliesToSpawn 대신 영구 보존 리스트 사용
 }
 
 void UPlayerInfoWindowWidget::EnsureSelectedLoadoutInitialized()
 {
 	if (!EquipmentSubsystem) return;
-	EquipmentSubsystem->EnsurePartySize(GetPartyCount());
-	if (UUnitDataAsset* UnitDA = GetPartyUnitData(SelectedPartyIndex))
+	const int32 PartyCount = GetPartyCount();
+	EquipmentSubsystem->EnsurePartySize(PartyCount);
+	for (int32 i = 0; i < PartyCount; ++i) // 전체 파티 초기화
 	{
-		EquipmentSubsystem->InitializeUnitLoadoutIfMissing(SelectedPartyIndex, UnitDA);
+		if (UUnitDataAsset* UnitDA = GetPartyUnitData(i))
+		{
+			EquipmentSubsystem->InitializeUnitLoadoutIfMissing(i, UnitDA);
+		}
 	}
 }
+
 
 void UPlayerInfoWindowWidget::EnsureDefaultWeaponsInitialized()
 {
@@ -185,7 +182,9 @@ UWeaponDataAsset* UPlayerInfoWindowWidget::ResolveCurrentWeaponForUI(const FPlay
 
 UArmorDataAsset* UPlayerInfoWindowWidget::ResolveCurrentArmorForUI(const FPlayerInfoEquipmentButtonDef& Def, UUnitDataAsset* UnitDA) const
 {
-	UArmorDataAsset* Armor = EquipmentSubsystem ? EquipmentSubsystem->GetEquippedArmor(SelectedPartyIndex) : nullptr;
+	// ArmorID(EquipmentKey) 기준으로 조회
+	UArmorDataAsset* Armor = (EquipmentSubsystem && Def.EquipmentKey != NAME_None)
+		? EquipmentSubsystem->GetEquippedArmor(SelectedPartyIndex, Def.EquipmentKey) : nullptr;
 	if (!Armor && Def.ArmorOverride)
 	{
 		Armor = Def.ArmorOverride;
@@ -196,6 +195,7 @@ UArmorDataAsset* UPlayerInfoWindowWidget::ResolveCurrentArmorForUI(const FPlayer
 	}
 	return Armor;
 }
+
 
 void UPlayerInfoWindowWidget::HandleAlly0Clicked()
 {
@@ -244,8 +244,6 @@ bool UPlayerInfoWindowWidget::OpenEquipmentPartsWindow(FName EquipmentKey)
 	UUnitDataAsset* UnitDA = GetPartyUnitData(SelectedPartyIndex);
 	if (!Def || !UnitDA) return false;
 
-	EnsureSelectedLoadoutInitialized();
-
 	if (Def->Kind == EPlayerInfoEquipmentKind::Weapon)
 	{
 		if (UWeaponDataAsset* Weapon = ResolveCurrentWeaponForUI(*Def, UnitDA))
@@ -286,13 +284,61 @@ void UPlayerInfoWindowWidget::PositionEquipPartsWindowNextToButton(FName Equipme
 
 void UPlayerInfoWindowWidget::HandleEquipmentChanged(int32 PartyIndex)
 {
+	UE_LOG(LogTemp, Warning, TEXT("[PIW] HandleEquipmentChanged called. PartyIndex=%d SelectedPartyIndex=%d"),
+		PartyIndex, SelectedPartyIndex);
 	if (PartyIndex != SelectedPartyIndex) return;
+
+	// 장비 변경 시 SavedMaxHP 기준으로 SavedHP 증가분 반영
+	if (EquipmentSubsystem && TransferSubsystem)
+	{
+		UUnitDataAsset* UnitDA = GetPartyUnitData(SelectedPartyIndex);
+		if (UnitDA)
+		{
+			const float NewMaxHP = EquipmentSubsystem->ResolveFinalStats(
+				SelectedPartyIndex, UnitDA->BaseStats).MaxHP;
+			const float OldMaxHP = TransferSubsystem->GetSavedMaxHP(SelectedPartyIndex);
+			const float SavedHP  = TransferSubsystem->GetSavedHP(SelectedPartyIndex);
+
+			if (OldMaxHP >= 0.f && SavedHP >= 0.f)
+			{
+				// MaxHP 증가분만큼 CurHP도 올림
+				const float Delta = NewMaxHP - OldMaxHP;
+				if (Delta > 0.f)
+				{
+					TransferSubsystem->SetSavedHP(
+						SelectedPartyIndex,
+						FMath::Clamp(SavedHP + Delta, 0.f, NewMaxHP));
+				}
+				else
+				{
+					// MaxHP 감소 시 CurHP가 초과하지 않게만 클램프
+					TransferSubsystem->SetSavedHP(
+						SelectedPartyIndex,
+						FMath::Clamp(SavedHP, 0.f, NewMaxHP));
+				}
+			}
+			else if (SavedHP < 0.f)
+			{
+				// SavedHP 없으면 MaxHP 풀피로 초기화
+				TransferSubsystem->SetSavedHP(SelectedPartyIndex, NewMaxHP);
+			}
+
+			// 현재 MaxHP를 기록해둠 (다음 장비 변경 시 OldMaxHP로 사용)
+			TransferSubsystem->SetSavedMaxHP(SelectedPartyIndex, NewMaxHP);
+			UE_LOG(LogTemp, Warning, TEXT("[PIW] OldMaxHP=%.1f NewMaxHP=%.1f Delta=%.1f SavedHP=%.1f -> NewSavedHP=%.1f"),
+				OldMaxHP, NewMaxHP, NewMaxHP - OldMaxHP,
+				TransferSubsystem->GetSavedHP(SelectedPartyIndex),
+				TransferSubsystem->GetSavedHP(SelectedPartyIndex));
+		}
+	}
+
 	RefreshSelectedMemberPanel();
 	if (EquipPartsWindow && EquipPartsWindow->GetVisibility() == ESlateVisibility::Visible)
 	{
 		EquipPartsWindow->Refresh();
 	}
 }
+
 
 void UPlayerInfoWindowWidget::SelectPartyMember(int32 PartyIndex)
 {
@@ -395,15 +441,6 @@ void UPlayerInfoWindowWidget::RefreshSelectedMemberPanel()
 	RefreshStatsPanel();
 }
 
-// UPlayerInfoEquipButtonWidget* UPlayerInfoWindowWidget::FindEquipmentButtonWidget(FName EquipmentKey) const
-// {
-// 	if (const TObjectPtr<UPlayerInfoEquipButtonWidget>* Found = EquipButtonsByKey.Find(EquipmentKey))
-// 	{
-// 		return Found->Get();
-// 	}
-// 	return nullptr;
-// }
-
 bool UPlayerInfoWindowWidget::ResolveEquipmentButtonDef(FName EquipmentKey, FPlayerInfoEquipmentButtonDef& OutDef) const
 {
 	if (UUnitDataAsset* UnitDA = GetPartyUnitData(SelectedPartyIndex))
@@ -420,51 +457,6 @@ bool UPlayerInfoWindowWidget::ResolveEquipmentButtonDef(FName EquipmentKey, FPla
 
 	return false;
 }
-
-// FVector2D UPlayerInfoWindowWidget::GetEquipButtonWindowPosition(FName EquipmentKey) const
-// {
-// 	if (const TObjectPtr<UPlayerInfoEquipButtonWidget>* Found = EquipButtonsByKey.Find(EquipmentKey))
-// 	{
-// 		if (UPlayerInfoEquipButtonWidget* ButtonWidget = Found->Get())
-// 		{
-// 			const FGeometry Geometry = ButtonWidget->GetCachedGeometry();
-// 			FVector2D PixelPosition;
-// 			FVector2D ViewportPosition;
-// 			USlateBlueprintLibrary::LocalToViewport(this, Geometry, FVector2D(Geometry.GetLocalSize().X, 0.f), PixelPosition, ViewportPosition);
-// 			return ViewportPosition + FVector2D(12.f, 0.f);
-// 		}
-// 	}
-//
-// 	return FVector2D(64.f, 64.f);
-// }
-
-// bool UPlayerInfoWindowWidget::TryToggleEquipmentPartsWindow(FName EquipmentKey)
-// {
-// 	FPlayerInfoEquipmentButtonDef ButtonDef;
-// 	if (!ResolveEquipmentButtonDef(EquipmentKey, ButtonDef))
-// 	{
-// 		return false;
-// 	}
-//
-// 	if (!EquipPartsWindow)
-// 	{
-// 		return false;
-// 	}
-//
-// 	if (EquipPartsWindow->IsOpenFor(SelectedPartyIndex, EquipmentKey))
-// 	{
-// 		HideEquipPartsWindow();
-// 		return true;
-// 	}
-//
-// 	if (EquipPartsWindow->OpenForEquipment(SelectedPartyIndex, EquipmentKey))
-// 	{
-// 		EquipPartsWindow->SetWindowScreenPosition(GetEquipButtonWindowPosition(EquipmentKey));
-// 		return true;
-// 	}
-//
-// 	return false;
-// }
 
 void UPlayerInfoWindowWidget::HideEquipPartsWindow()
 {
@@ -530,50 +522,6 @@ void UPlayerInfoWindowWidget::RebuildEquipmentButtons()
 
 }
 
-// void UPlayerInfoWindowWidget::OpenPartsWindowForEquipment(FName EquipmentKey)
-// {
-// 	if (EquipmentKey.IsNone() || !EquipPartsWindowClass || !GetOwningPlayer())
-// 	{
-// 		return;
-// 	}
-//
-// 	if (!EquipPartsWindow)
-// 	{
-// 		EquipPartsWindow = CreateWidget<UEquipPartsWindowWidget>(GetOwningPlayer(), EquipPartsWindowClass);
-// 		if (EquipPartsWindow)
-// 		{
-// 			EquipPartsWindow->AddToViewport(45);
-// 			EquipPartsWindow->SetVisibility(ESlateVisibility::Collapsed);
-// 		}
-// 	}
-//
-// 	if (!EquipPartsWindow)
-// 	{
-// 		return;
-// 	}
-//
-// 	if (EquipPartsWindow->GetVisibility() == ESlateVisibility::Visible &&
-// 		EquipPartsWindow->GetCurrentPartyIndex() == SelectedPartyIndex &&
-// 		EquipPartsWindow->GetCurrentEquipmentKey() == EquipmentKey)
-// 	{
-// 		ClosePartsWindow();
-// 		return;
-// 	}
-//
-// 	FVector2D WindowPos(100.f, 100.f);
-// 	if (UPlayerInfoEquipButtonWidget* ButtonWidget = FindEquipmentButtonWidget(EquipmentKey))
-// 	{
-// 		const FGeometry Geometry = ButtonWidget->GetCachedGeometry();
-// 		FVector2D PixelPosition, ViewportPosition;
-// 		USlateBlueprintLibrary::LocalToViewport(GetWorld(), Geometry, FVector2D::ZeroVector, PixelPosition, ViewportPosition);
-// 		WindowPos = ViewportPosition + FVector2D(Geometry.GetLocalSize().X + 16.f, 0.f);
-// 	}
-//
-// 	EquipPartsWindow->SetAlignmentInViewport(FVector2D::ZeroVector);
-// 	EquipPartsWindow->SetPositionInViewport(WindowPos, false);
-// 	EquipPartsWindow->OpenForEquipment(SelectedPartyIndex, EquipmentKey);
-// }
-
 void UPlayerInfoWindowWidget::ClosePartsWindow()
 {
 	if (EquipPartsWindow)
@@ -581,26 +529,6 @@ void UPlayerInfoWindowWidget::ClosePartsWindow()
 		EquipPartsWindow->Close();
 	}
 }
-
-// bool UPlayerInfoWindowWidget::FindEquipmentButtonDef(FName EquipmentKey, FPlayerInfoEquipmentButtonDef& OutDef) const
-// {
-// 	UUnitDataAsset* UnitDA = GetPartyUnitData(SelectedPartyIndex);
-// 	if (!UnitDA)
-// 	{
-// 		return false;
-// 	}
-//
-// 	for (const FPlayerInfoEquipmentButtonDef& Def : UnitDA->PlayerInfoEquipButtons)
-// 	{
-// 		if (Def.EquipmentKey == EquipmentKey)
-// 		{
-// 			OutDef = Def;
-// 			return true;
-// 		}
-// 	}
-//
-// 	return false;
-// }
 
 void UPlayerInfoWindowWidget::RefreshStatsPanel()
 {
@@ -610,14 +538,26 @@ void UPlayerInfoWindowWidget::RefreshStatsPanel()
 	FUnitBaseStats FinalStats = BaseStats;
 	if (EquipmentSubsystem && UnitDA)
 	{
-		EquipmentSubsystem->InitializeUnitLoadoutIfMissing(SelectedPartyIndex, UnitDA);
 		FinalStats = EquipmentSubsystem->ResolveFinalStats(SelectedPartyIndex, BaseStats);
 	}
+
+	UE_LOG(LogTemp, Warning, TEXT("[PlayerInfo] RefreshStats PartyIndex=%d UnitDA=%s BaseATK=%.1f FinalATK=%.1f BaseHP=%.1f FinalHP=%.1f"),
+		SelectedPartyIndex, *GetNameSafe(UnitDA), BaseStats.AttackPower, FinalStats.AttackPower, BaseStats.MaxHP, FinalStats.MaxHP);
+	UE_LOG(LogTemp, Warning, TEXT("[PlayerInfo] TextWidgets: Text_ATK=%s Text_HP=%s Text_SPD=%s"),
+		Text_ATK ? TEXT("Valid") : TEXT("NULL"),
+		Text_HP  ? TEXT("Valid") : TEXT("NULL"),
+		Text_SPD ? TEXT("Valid") : TEXT("NULL"));
 
 	float CurHP = FinalStats.MaxHP;
 	int32 CurSP = UnitDA ? UnitDA->BaseSkillPoints : 0;
 	if (TransferSubsystem)
 	{
+		// SavedMaxHP 미설정 시 현재 MaxHP로 초기화
+		if (TransferSubsystem->GetSavedMaxHP(SelectedPartyIndex) < 0.f)
+		{
+			TransferSubsystem->SetSavedMaxHP(SelectedPartyIndex, FinalStats.MaxHP);
+		}
+
 		const float SavedHP = TransferSubsystem->GetSavedHP(SelectedPartyIndex);
 		if (SavedHP >= 0.f)
 		{
@@ -630,10 +570,10 @@ void UPlayerInfoWindowWidget::RefreshStatsPanel()
 		}
 	}
 
-	if (Text_HP) Text_HP->SetText(FText::FromString(FString::Printf(TEXT("HP %.0f / %.0f"), CurHP, FinalStats.MaxHP)));
+	if (Text_HP) Text_HP->SetText(FText::FromString(FString::Printf(TEXT("체력 %.0f / %.0f"), CurHP, FinalStats.MaxHP)));
 	if (Text_SP) Text_SP->SetText(FText::FromString(FString::Printf(TEXT("SP %d"), CurSP)));
-	if (Text_ATK) Text_ATK->SetText(FText::FromString(FString::Printf(TEXT("ATK %.0f"), FinalStats.AttackPower)));
-	if (Text_SPD) Text_SPD->SetText(FText::FromString(FString::Printf(TEXT("SPD %.0f"), FinalStats.Speed)));
+	if (Text_ATK) Text_ATK->SetText(FText::FromString(FString::Printf(TEXT("공격력 %.0f"), FinalStats.AttackPower)));
+	if (Text_SPD) Text_SPD->SetText(FText::FromString(FString::Printf(TEXT("속도 %.0f"), FinalStats.Speed)));
 
 	if (EquipmentSubsystem)
 	{
@@ -641,23 +581,22 @@ void UPlayerInfoWindowWidget::RefreshStatsPanel()
 		if (Text_Effects)
 		{
 			TArray<FString> Lines;
-			if (Effect.BonusProjectileCount != 0) Lines.Add(FString::Printf(TEXT("Proj %+d"), Effect.BonusProjectileCount));
-			if (Effect.BonusHitCount != 0) Lines.Add(FString::Printf(TEXT("Hit %+d"), Effect.BonusHitCount));
-			if (!FMath::IsNearlyZero(Effect.DamageMulAdd)) Lines.Add(FString::Printf(TEXT("DmgAdd %+0.2f"), Effect.DamageMulAdd));
-			if (!FMath::IsNearlyEqual(Effect.DamageMulMul, 1.f)) Lines.Add(FString::Printf(TEXT("DmgMul x%0.2f"), Effect.DamageMulMul));
-			if (Lines.Num() == 0) Lines.Add(TEXT("Effects: None"));
+			if (Effect.BonusProjectileCount != 0) Lines.Add(FString::Printf(TEXT("투사체 개수 %+d"), Effect.BonusProjectileCount));
+			if (Effect.BonusHitCount != 0) Lines.Add(FString::Printf(TEXT("타수 %+d"), Effect.BonusHitCount));
+			if (Effect.BonusSkillPointGain != 0) Lines.Add(FString::Printf(TEXT("추가 SP %+d"), Effect.BonusSkillPointGain));
+			if (Lines.Num() == 0) Lines.Add(TEXT("적용된 효과 없음"));
 			Text_Effects->SetText(FText::FromString(FString::Join(Lines, TEXT("\n"))));
 		}
-		const float FinalDmgMul = (1.f + Effect.DamageMulAdd) * Effect.DamageMulMul;
-		if (Text_Proj) Text_Proj->SetText(FText::FromString(FString::Printf(TEXT("Proj %+d"), Effect.BonusProjectileCount)));
-		if (Text_Hit) Text_Hit->SetText(FText::FromString(FString::Printf(TEXT("Hit %+d"), Effect.BonusHitCount)));
-		if (Text_DmgMul) Text_DmgMul->SetText(FText::FromString(FString::Printf(TEXT("DmgMul x%.2f"), FinalDmgMul)));
+		
+		if (Text_Proj) Text_Proj->SetText(FText::FromString(FString::Printf(TEXT("투사체 개수 %+d"), Effect.BonusProjectileCount)));
+		if (Text_Hit) Text_Hit->SetText(FText::FromString(FString::Printf(TEXT("타수 %+d"), Effect.BonusHitCount)));
+		if (Text_DmgMul) Text_DmgMul->SetText(FText::FromString(FString::Printf(TEXT("추가 SP %d"), Effect.BonusSkillPointGain)));
 	}
 	else
 	{
-		if (Text_Effects) Text_Effects->SetText(FText::FromString(TEXT("Effects: None")));
-		if (Text_Proj) Text_Proj->SetText(FText::FromString(TEXT("Proj +0")));
-		if (Text_Hit) Text_Hit->SetText(FText::FromString(TEXT("Hit +0")));
-		if (Text_DmgMul) Text_DmgMul->SetText(FText::FromString(TEXT("DmgMul x1.00")));
+		if (Text_Effects) Text_Effects->SetText(FText::FromString(TEXT("적용된 효과 없음")));
+		if (Text_Proj) Text_Proj->SetText(FText::FromString(TEXT("투사체 개수 +0")));
+		if (Text_Hit) Text_Hit->SetText(FText::FromString(TEXT("타수 +0")));
+		if (Text_DmgMul) Text_DmgMul->SetText(FText::FromString(TEXT("추가 SP +0")));
 	}
 }

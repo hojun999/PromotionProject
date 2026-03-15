@@ -63,6 +63,8 @@ void AEncounterSpawner::BeginPlay()
 	if (!Enemy) return;
 	
 	Enemy->InitializeEncounterInfo(EncounterID, UnitData, SpawnData, bDefeated);
+	Enemy->SetPatrolPoints(PatrolPoints); // 순찰 포인트 전달
+	Enemy->SetBossEncounter(bIsBossEncounter); // 보스 여부 전달
 	Enemy->FinishSpawning(SpawnTM);
 }
 

@@ -217,6 +217,14 @@ void AWorldBaseUnit::InitFromUnitData(UUnitDataAsset* InUnitData)
 		MeshComp->SetSkeletalMesh(UnitData->WorldSkeletalMesh);
 		MeshComp->SetHiddenInGame(false);
 	}
+
+	// 피벗 보정 - 중심이 발바닥이 아닐 때 Z 오프셋 적용
+	if (UnitData->WorldMeshZOffset != 0.f)
+	{
+		FVector CurrentOffset = MeshComp->GetRelativeLocation();
+		CurrentOffset.Z = UnitData->WorldMeshZOffset;
+		MeshComp->SetRelativeLocation(CurrentOffset);
+	}
 	
 	// 월드 애님 BP 적용
 	if (UnitData->WorldAnimBlueprintClass)
@@ -237,3 +245,4 @@ void AWorldBaseUnit::InitFromUnitData(UUnitDataAsset* InUnitData)
 	
 	RefreshEquipmentVisuals();
 }
+

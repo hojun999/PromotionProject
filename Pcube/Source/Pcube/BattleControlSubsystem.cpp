@@ -799,7 +799,45 @@ void UBattleControlSubsystem::HandleEnemyAI(ABattleBaseUnit* ActingEnemyUnit)
 		return;
 	}
 	
-	// 2. 타겟 선택
+	// 2. 스킬 먼저 선택 (타겟 분기 전에 필요) 
+	USkillDataAsset* ChosenSkill = nullptr;
+	const TArray<USkillDataAsset*>& SkillList = ActingEnemyUnit->UnitData->SkillList;
+
+	TArray<USkillDataAsset*> ValidSkills;
+	for (USkillDataAsset* S : SkillList)
+	{
+		if (IsValid(S)) ValidSkills.Add(S);
+	}
+	if (ValidSkills.Num() > 0)
+	{
+		ChosenSkill = ValidSkills[FMath::RandRange(0, ValidSkills.Num() - 1)];
+	}
+
+	// 3. TargetType 기준 타겟 결정 및 실행 
+	const bool bTargetAll = ChosenSkill &&
+		(ChosenSkill->TargetType == ESkillTargetRule::AllAllies); 
+
+	SetState(EBattleState::ActionExecute);
+
+	if (bTargetAll)
+	{
+		// 전체 아군 타겟 
+		OnTargetChanged.Broadcast(nullptr); // 기본 카메라로 전환 
+
+		TArray<AActor*> AllAllyActors;
+		for (ABattleBaseUnit* Ally : AliveAllies)
+		{
+			AllAllyActors.Add(Ally);
+		}
+
+		UE_LOG(LogTemp, Warning, TEXT("[EnemyAI] %s uses %s on ALL (%d targets)"), 
+			*ActingEnemyUnit->GetName(), *GetNameSafe(ChosenSkill), AllAllyActors.Num());
+
+		ActingEnemyUnit->ExecuteAction(ChosenSkill, AllAllyActors); 
+		return;
+	}
+
+	// 단일 타겟 
 	ABattleBaseUnit* TargetAlly = AliveAllies[FMath::RandRange(0, AliveAllies.Num() - 1)];
 	if (!IsValid(TargetAlly))
 	{
@@ -807,37 +845,11 @@ void UBattleControlSubsystem::HandleEnemyAI(ABattleBaseUnit* ActingEnemyUnit)
 		ActingEnemyUnit->FinishAction();
 		return;
 	}
-	
-	// 카메라 전환 브로드캐스트
-	if (OnTargetChanged.IsBound())
-	{
-		OnTargetChanged.Broadcast(TargetAlly);
-	}
-	
-	// 3. 스킬 선택
-	USkillDataAsset* ChosenSkill = nullptr;
-	const TArray<USkillDataAsset*>& SkillList = ActingEnemyUnit->UnitData->SkillList;
-	
-	TArray<USkillDataAsset*> ValidSkills;
-	for (USkillDataAsset* S : SkillList)
-	{
-		if (IsValid(S))
-		{	
-			ValidSkills.Add(S);
-		}
-	}
-	
-	if (ValidSkills.Num() > 0)
-	{
-		ChosenSkill = ValidSkills[FMath::RandRange(0, ValidSkills.Num() - 1)];
-	}
-	
+	OnTargetChanged.Broadcast(TargetAlly);
+
 	UE_LOG(LogTemp, Warning, TEXT("[EnemyAI] %s uses %s on %s"),
 		*ActingEnemyUnit->GetName(), *GetNameSafe(ChosenSkill), *TargetAlly->GetName());
-	
-	// 4. 실행 - 스킬 없으면 기본공격 + FinishAction -> 턴 진행 보장
-	SetState(EBattleState::ActionExecute);
-	
+
 	if (!ChosenSkill)
 	{
 		UE_LOG(LogTemp, Warning, TEXT("[EnemyAI] No valid skill -> BasicAttack fallback"));
@@ -845,7 +857,7 @@ void UBattleControlSubsystem::HandleEnemyAI(ABattleBaseUnit* ActingEnemyUnit)
 		ActingEnemyUnit->FinishAction();
 		return;
 	}
-	
+
 	ActingEnemyUnit->ExecuteAction(ChosenSkill, TargetAlly);
 }
 

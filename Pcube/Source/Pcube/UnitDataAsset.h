@@ -7,6 +7,7 @@
 #include "ArmorDataAsset.h"
 #include "UnitStatTypes.h"
 #include "Engine/DataAsset.h"
+#include "Sound/SoundBase.h"
 #include "UnitDataAsset.generated.h"
 
 class ABattleBaseUnit;
@@ -92,6 +93,11 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Visual|World")
 	TSubclassOf<UAnimInstance> WorldAnimBlueprintClass;
 	
+	// 월드 스켈레탈 메시 Z 오프셋 (피벗이 발바닥이 아닐 때 보정용)
+	// 중심이 몸통 중앙이면 -(캡슐 반높이) 값을 입력 (예: -88)
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Visual|World")
+	float WorldMeshZOffset = 0.f;
+	
 	// 적 전용 - 월드에서 죽었을 때 전환할 스태틱 메시
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Visual|World")
 	UStaticMesh* DeadStaticMesh;
@@ -150,6 +156,10 @@ public:
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Visual|Battle|React")
 	FVector EnemyHitParticleOffset = FVector(0.f, 0.f, 80.f);
+	
+	// 피격 시 재생할 효과음
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Visual|Battle|React|Audio")
+	TObjectPtr<USoundBase> HitSFX = nullptr;
 	
 	// 기본 스탯
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Stats")

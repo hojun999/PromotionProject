@@ -72,4 +72,8 @@ private:
 	TObjectPtr<ABattleHUD> BattleHUD = nullptr;
 	
 	void CacheBattleHUD();
+	void CacheDefaultBattleCamera();
+	
+	UPROPERTY(EditAnywhere, Category="Camera")
+	TObjectPtr<AActor> DefaultBattleCamera = nullptr;
 };

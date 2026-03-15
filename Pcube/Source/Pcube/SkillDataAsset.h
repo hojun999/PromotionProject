@@ -4,6 +4,7 @@
 
 #include "CoreMinimal.h"
 #include "Engine/DataAsset.h"
+#include "Sound/SoundBase.h"
 #include "SkillDataAsset.generated.h"
 
 class ABattleProjectile;
@@ -129,6 +130,10 @@ public:
 	// --- 연출 ---
 	UPROPERTY(EditAnywhere, Category="Battle|Skill")
 	class UAnimMontage* ActionMontage;
+	
+	// 스킬 사용 시 재생할 효과음
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Battle|Skill|Audio")
+	TObjectPtr<USoundBase> SkillSFX = nullptr;
 	
 	UFUNCTION(BlueprintCallable)
 	bool RequiresTargetSelection() const

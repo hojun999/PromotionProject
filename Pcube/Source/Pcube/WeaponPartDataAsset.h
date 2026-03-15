@@ -19,10 +19,17 @@ struct FWeaponPartEffect
 	int32 BonusHitCount = 0; // 타수 + N
 	
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Effect")
-	float DamageMulAdd = 0.f; // 데미지 배율 +a (합연산)
+	int32 BonusSkillPointGain = 0; // 기본공격 SP 획득량 +N
+	
+	// 파츠 장착 스탯 보너스
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Effect")
+	float BonusMaxHP = 0.f; // MaxHP +N
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Effect")
+	float BonusAttackPower = 0.f; // ATK +N
 	
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Effect")
-	float DamageMulMul = 1.f; // 데미지 배율 *a (곱연산)
+	float BonusSpeed = 0.f; // SPD +N
 };
 
 UCLASS()

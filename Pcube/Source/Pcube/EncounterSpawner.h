@@ -42,4 +42,11 @@ public:
 	UPROPERTY(EditInstanceOnly, Category="Encounter")
 	bool bSkipSpawnIfDefeated = false;
 	
+	// 순찰 경유 포인트 (월드 좌표). 비어있으면 스폰 위치에서 Idle
+	UPROPERTY(EditInstanceOnly, Category="Encounter|Patrol")
+	TArray<FVector> PatrolPoints;
+	
+	// true면 이 전투 승리 시 게임 클리어 처리
+	UPROPERTY(EditInstanceOnly, Category="Encounter")
+	bool bIsBossEncounter = false;
 };

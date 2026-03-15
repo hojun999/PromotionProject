@@ -10,8 +10,7 @@ class UWorld;
 class AWorldCCTVCameraDirector;
 
 /**
- * Place in L_World to switch the CCTV camera to a new anchor when player enters.
- * Uses priority to avoid flicker with overlapping zones.
+ * 플레이어가 진입하면 CCTV 뷰로 전환
  */
 UCLASS()
 class PCUBE_API AWorldCameraZoneTrigger : public AActor
@@ -56,7 +55,7 @@ protected:
 
 	/** If true, use fade-out -> stream -> fade-in flow when entering this zone. */
 	UPROPERTY(EditInstanceOnly, BlueprintReadOnly, Category="Transition")
-	bool bUseFadeTransition = true;
+	bool bUseFadeTransition = false;
 
 	UPROPERTY(EditInstanceOnly, BlueprintReadOnly, Category="Transition", meta=(EditCondition="bUseFadeTransition", ClampMin="0.0"))
 	float FadeOutDuration = 0.25f;
@@ -66,19 +65,11 @@ protected:
 
 	/** Player movement/look input is blocked during transition. */
 	UPROPERTY(EditInstanceOnly, BlueprintReadOnly, Category="Transition")
-	bool bFreezePlayerDuringTransition = true;
+	bool bFreezePlayerDuringTransition = false;
 
 	/** Block while streaming levels while screen is black. */
 	UPROPERTY(EditInstanceOnly, BlueprintReadOnly, Category="Streaming")
 	bool bBlockOnLevelStreaming = true;
-
-	/** Sublevels to make visible/loaded for this view. */
-	UPROPERTY(EditInstanceOnly, BlueprintReadOnly, Category="Streaming")
-	TArray<TSoftObjectPtr<UWorld>> LevelsToLoad;
-
-	/** Sublevels to hide/unload when entering this view. */
-	UPROPERTY(EditInstanceOnly, BlueprintReadOnly, Category="Streaming")
-	TArray<TSoftObjectPtr<UWorld>> LevelsToUnload;
 
 	/** Optional convenience for initial state: if player starts already inside, apply this zone on BeginPlay. */
 	UPROPERTY(EditInstanceOnly, BlueprintReadOnly, Category="Trigger")
@@ -96,4 +87,5 @@ private:
 	bool IsPlayerActor(AActor* Actor) const;
 	void EnsureDirector();
 	void ApplyZoneToPlayer(AActor* PlayerActor);
+	void RestorePlayerCamera();
 };

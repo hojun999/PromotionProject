@@ -8,6 +8,7 @@
 #include "BattleActionOrderWidget.h"
 #include "BattleActionMenu.h"
 #include "BattleActionIntentWidget.h"
+#include "Sound/SoundBase.h"
 #include "BattleHUD.generated.h"
 
 class ABattleBaseUnit;
@@ -21,12 +22,17 @@ class PCUBE_API ABattleHUD : public ABaseHUD
 	// TODO: 1. 턴 순서 2. 스킬 패널 3. 전투 상태 (전투 시작, 전투 종료 등) 4. 유닛 초상화 & 해당 유닛의 스탯 정보
 	
 public:
+	// 전투 BGM (에디터 BP_BattleHUD 에서 할당)
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Audio")
+	TObjectPtr<USoundBase> BattleBGMSound = nullptr;
+
 	UBattleActionMenu* GetActionMenuWidget() const { return BattleActionMenuWidget; }
 	
 	void ShowActionMenu(ABattleAllyUnit* AllyUnit);
 	void HideActionMenu();
 	void ShowGameOverUI();
 	void ShowVictoryUI();
+	void ShowGameClearUI();
 	void ShowActionIntentForSkill(USkillDataAsset* Skill);
 	void ShowActionIntentForItem(UItemDataAsset* Item);
 	void HideActionIntent();
@@ -48,6 +54,10 @@ protected:
 	
 	UPROPERTY(EditDefaultsOnly, Category="Battle|UI")
 	TSubclassOf<UUserWidget> VictoryWidgetClass;
+	
+	// 게임 클리어 위젯 (보스 처치 시)
+	UPROPERTY(EditDefaultsOnly, Category="Battle|UI")
+	TSubclassOf<UUserWidget> GameClearWidgetClass;
 	
 	// Q/E 타겟 변경 힌트 위젯 클래스
 	UPROPERTY(EditDefaultsOnly, Category="Battle|UI")
@@ -83,7 +93,10 @@ protected:
 	TObjectPtr<UUserWidget> VictoryWidget = nullptr;
 	
 	UPROPERTY()
-	TObjectPtr<UUserWidget> DisplayCancleWidget = nullptr;
+	TObjectPtr<UUserWidget> GameClearWidget = nullptr;
+	
+	UPROPERTY()
+	TObjectPtr<UUserWidget> DisplayCancelWidget = nullptr;
 	
 	UPROPERTY()
 	TObjectPtr<UUserWidget> DisplayChangeTargetWidget = nullptr;
@@ -97,7 +110,11 @@ protected:
 	
 	UFUNCTION()
 	void HandleTurnUnitChanged(ABattleBaseUnit* ActiveUnit);
-
+	
+	// 현재 턴 유닛 캐싱 - 아군/적군 판별용
+	UPROPERTY()
+	TObjectPtr<ABattleBaseUnit> CurrentTurnUnit = nullptr;
+	
 	UFUNCTION()
 	void HandleActionOrderChanged(const TArray<AActor*>& NewOrder);
 	

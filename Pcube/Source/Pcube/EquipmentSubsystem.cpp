@@ -46,27 +46,25 @@ void UEquipmentSubsystem::InitializeUnitLoadoutIfMissing(int32 PartyIndex, UUnit
 
 	FUnitEquipmentState& State = PartyEquipments[PartyIndex];
 
-	// UnitData가 바뀌었으면 장비 상태 리셋 후 재초기화 
-	if (State.SourceUnitData != UnitData) 
-	{ 
-		State.Weapon = nullptr; 
-		State.Armor = nullptr; 
-		State.EquippedParts.Empty(); 
-		State.SourceUnitData = UnitData; 
-		UE_LOG(LogTemp, Warning, TEXT("[EquipSub] PartyIndex=%d UnitData 변경 감지 - 장비 리셋: %s"), PartyIndex, *GetNameSafe(UnitData)); 
-	} 
-
 	if (!State.Weapon && UnitData->DefaultWeapon)
 	{
 		State.Weapon = UnitData->DefaultWeapon;
 	}
 
-	if (!State.Armor && UnitData->DefaultArmor)
+	// PlayerInfoEquipButtons 기준으로 모든 방어구 초기화 
+	for (const FPlayerInfoEquipmentButtonDef& Btn : UnitData->PlayerInfoEquipButtons) 
 	{
-		State.Armor = UnitData->DefaultArmor;
+		if (Btn.Kind != EPlayerInfoEquipmentKind::Armor) continue; 
+		if (Btn.EquipmentKey == NAME_None) continue; 
+		UArmorDataAsset* DefaultArmor = Btn.ArmorOverride ? Btn.ArmorOverride : UnitData->DefaultArmor; 
+		if (DefaultArmor && !State.Armors.Contains(Btn.EquipmentKey)) 
+		{
+			State.Armors.Add(Btn.EquipmentKey, DefaultArmor); 
+		}
 	}
+	UE_LOG(LogTemp, Warning, TEXT("[EquipSub] InitLoadout PartyIndex=%d UnitData=%s Weapon=%s ArmorCount=%d"), 
+		PartyIndex, *GetNameSafe(UnitData), *GetNameSafe(State.Weapon), State.Armors.Num()); 
 }
-
 
 const FWeaponModSlotDef* UEquipmentSubsystem::FindWeaponSlotDef(const UWeaponDataAsset* Weapon, FName PartSlotKeyOrSocketName) const
 {
@@ -98,13 +96,17 @@ FName UEquipmentSubsystem::ResolveStoredPartKey(int32 PartyIndex, FName PartSlot
 		return WeaponDef->SlotId;
 	}
 
-	if (const FWeaponModSlotDef* ArmorDef = FindArmorSlotDef(State.Armor, PartSlotKeyOrSocketName))
+	for (const TPair<FName, TObjectPtr<UArmorDataAsset>>& ArmorPair : State.Armors)
 	{
-		return ArmorDef->SlotId;
+		if (const FWeaponModSlotDef* ArmorDef = FindArmorSlotDef(ArmorPair.Value, PartSlotKeyOrSocketName))
+		{
+			return ArmorDef->SlotId;
+		}
 	}
 
 	return PartSlotKeyOrSocketName;
 }
+
 
 const FWeaponModSlotDef* UEquipmentSubsystem::FindArmorSlotDef(const UArmorDataAsset* Armor, FName PartSlotKeyOrSocketName) const
 {
@@ -156,10 +158,21 @@ UWeaponDataAsset* UEquipmentSubsystem::GetEquippedWeapon(int32 PartyIndex) const
 	return IsValidParty(PartyIndex) ? PartyEquipments[PartyIndex].Weapon : nullptr;
 }
 
-UArmorDataAsset* UEquipmentSubsystem::GetEquippedArmor(int32 PartyIndex) const
+UArmorDataAsset* UEquipmentSubsystem::GetEquippedArmor(int32 PartyIndex, FName ArmorID) const 
 {
-	return IsValidParty(PartyIndex) ? PartyEquipments[PartyIndex].Armor : nullptr;
+	if (!IsValidParty(PartyIndex) || ArmorID == NAME_None) return nullptr; 
+	if (const TObjectPtr<UArmorDataAsset>* Found = PartyEquipments[PartyIndex].Armors.Find(ArmorID)) 
+	{
+		return Found->Get(); 
+	}
+	return nullptr; 
 }
+
+const TMap<FName, TObjectPtr<UArmorDataAsset>>* UEquipmentSubsystem::GetAllEquippedArmors(int32 PartyIndex) const 
+{
+	return IsValidParty(PartyIndex) ? &PartyEquipments[PartyIndex].Armors : nullptr; 
+}
+
 
 UWeaponPartDataAsset* UEquipmentSubsystem::GetEquippedPart(int32 PartyIndex, FName PartSlotKeyOrSocketName) const
 {
@@ -201,9 +214,13 @@ bool UEquipmentSubsystem::CanEquipWeaponPart(int32 PartyIndex, FName PartSlotKey
 		// 레거시 호환 (SlotType / SocketName)
 		const FUnitEquipmentState& State = PartyEquipments[PartyIndex];
 		const FWeaponModSlotDef* SlotDef = FindWeaponSlotDef(State.Weapon, StoredKey);
-		if (!SlotDef)
+		if (!SlotDef) // Armors 맵 순회
 		{
-			SlotDef = FindArmorSlotDef(State.Armor, StoredKey);
+			for (const TPair<FName, TObjectPtr<UArmorDataAsset>>& ArmorPair : State.Armors) 
+			{
+				SlotDef = FindArmorSlotDef(ArmorPair.Value, StoredKey); 
+				if (SlotDef) break; 
+			}
 		}
 		if (!SlotDef) return false;
 		if (NewPart->SlotType != SlotDef->SlotType) return false;
@@ -216,24 +233,23 @@ bool UEquipmentSubsystem::CanEquipWeaponPart(int32 PartyIndex, FName PartSlotKey
 	const int32 InvQuantity = Inv->GetQuantity(NewPart);
 	if (InvQuantity <= 0) return false;
 
-	// 동일 파츠가 모든 슬롯에 장착된 수량 카운트 // 추가됨
-	int32 AlreadyEquippedCount = 0; // 추가됨
-	for (const FUnitEquipmentState& EqState : PartyEquipments) // 추가됨
-	{ // 추가됨
-		for (const TPair<FName, TObjectPtr<UWeaponPartDataAsset>>& Pair : EqState.EquippedParts) // 추가됨
-		{ // 추가됨
-			if (Pair.Value == NewPart) ++AlreadyEquippedCount; // 추가됨
-		} // 추가됨
-	} // 추가됨
+	// 동일 파티원 내 슬롯에 장착된 수량만 카운트, 전체 파티 → 같은 파티원 내
+	int32 AlreadyEquippedCount = 0;
+	for (const TPair<FName, TObjectPtr<UWeaponPartDataAsset>>& Pair : PartyEquipments[PartyIndex].EquippedParts)
+	{
+		if (Pair.Value == NewPart) ++AlreadyEquippedCount;
+	}
 
-	// 현재 슬롯에 이미 같은 파츠가 장착됨 = 재장착 불필요 → false // 수정됨
-	if (const TObjectPtr<UWeaponPartDataAsset>* CurPart = PartyEquipments[PartyIndex].EquippedParts.Find(StoredKey)) // 수정됨
-	{ // 수정됨
-		if (*CurPart == NewPart) return false; // 수정됨 - 같은 슬롯 같은 파츠 → 버튼 비활성화
-		--AlreadyEquippedCount; // 수정됨 - 다른 파츠면 교체 대상이므로 차감
-	} // 수정됨
+	// 현재 슬롯에 이미 같은 파츠가 장착됨 = 재장착 불필요 → false 
+	if (const TObjectPtr<UWeaponPartDataAsset>* CurPart = PartyEquipments[PartyIndex].EquippedParts.Find(StoredKey)) 
+	{ 
+		if (*CurPart == NewPart) return false; // 같은 슬롯 같은 파츠 → 버튼 비활성화
+		--AlreadyEquippedCount; // 다른 파츠면 교체 대상이므로 차감
+	} 
 
-	return (InvQuantity - AlreadyEquippedCount) > 0; // 수정됨
+	UE_LOG(LogTemp, Warning, TEXT("[CanEquip] InvQty=%d AlreadyEquipped=%d StoredKey=%s"),
+	InvQuantity, AlreadyEquippedCount, *StoredKey.ToString());
+	return InvQuantity > 0; 
 }
 
 
@@ -302,7 +318,7 @@ bool UEquipmentSubsystem::UnequipWeaponPart(int32 PartyIndex, FName PartSlotKeyO
 FWeaponPartEffect UEquipmentSubsystem::GetTotalEquippedPartEffect(int32 PartyIndex) const
 {
 	FWeaponPartEffect Out;
-	Out.DamageMulMul = 1.f;
+	Out.BonusSkillPointGain = 0; 
 	if (!IsValidParty(PartyIndex)) return Out;
 
 	for (const TPair<FName, TObjectPtr<UWeaponPartDataAsset>>& Pair : PartyEquipments[PartyIndex].EquippedParts)
@@ -311,8 +327,10 @@ FWeaponPartEffect UEquipmentSubsystem::GetTotalEquippedPartEffect(int32 PartyInd
 		if (!Part) continue;
 		Out.BonusProjectileCount += Part->Effect.BonusProjectileCount;
 		Out.BonusHitCount += Part->Effect.BonusHitCount;
-		Out.DamageMulAdd += Part->Effect.DamageMulAdd;
-		Out.DamageMulMul *= Part->Effect.DamageMulMul;
+		Out.BonusSkillPointGain += Part->Effect.BonusSkillPointGain;
+		Out.BonusMaxHP += Part->Effect.BonusMaxHP;
+		Out.BonusAttackPower += Part->Effect.BonusAttackPower;
+		Out.BonusSpeed += Part->Effect.BonusSpeed;
 	}
 	return Out;
 }
@@ -324,21 +342,31 @@ FEquipmentStatBonus UEquipmentSubsystem::GetTotalEquipmentBaseStatBonus(int32 Pa
 	if (!IsValidParty(PartyIndex)) return Out;
 
 	const FUnitEquipmentState& State = PartyEquipments[PartyIndex];
+	UE_LOG(LogTemp, Warning, TEXT("[EquipSub] GetStatBonus PartyIndex=%d Weapon=%s ArmorCount=%d"),
+		PartyIndex, *GetNameSafe(State.Weapon), State.Armors.Num()); 
 	if (State.Weapon)
 	{
 		Out.MaxHP += State.Weapon->BaseStatBonus.MaxHP;
 		Out.Speed += State.Weapon->BaseStatBonus.Speed;
 		Out.AttackPower += State.Weapon->BaseStatBonus.AttackPower;
+		UE_LOG(LogTemp, Warning, TEXT("[EquipSub]  Weapon bonus: HP=%.1f SPD=%.1f ATK=%.1f"),
+			State.Weapon->BaseStatBonus.MaxHP, State.Weapon->BaseStatBonus.Speed, State.Weapon->BaseStatBonus.AttackPower);
 	}
-	if (State.Armor)
+	for (const TPair<FName, TObjectPtr<UArmorDataAsset>>& ArmorPair : State.Armors) 
 	{
-		Out.MaxHP += State.Armor->BaseStatBonus.MaxHP;
-		Out.Speed += State.Armor->BaseStatBonus.Speed;
-		Out.AttackPower += State.Armor->BaseStatBonus.AttackPower;
+		const UArmorDataAsset* Armor = ArmorPair.Value; 
+		if (!Armor) continue; 
+		Out.MaxHP += Armor->BaseStatBonus.MaxHP; 
+		Out.Speed += Armor->BaseStatBonus.Speed; 
+		Out.AttackPower += Armor->BaseStatBonus.AttackPower; 
+		UE_LOG(LogTemp, Warning, TEXT("[EquipSub]  Armor[%s] bonus: HP=%.1f SPD=%.1f ATK=%.1f"), 
+			*ArmorPair.Key.ToString(), Armor->BaseStatBonus.MaxHP, Armor->BaseStatBonus.Speed, Armor->BaseStatBonus.AttackPower); 
 	}
 
 	return Out;
 }
+
+
 
 FUnitBaseStats UEquipmentSubsystem::ResolveFinalStats(int32 PartyIndex, const FUnitBaseStats& BaseStats) const
 {
@@ -347,5 +375,11 @@ FUnitBaseStats UEquipmentSubsystem::ResolveFinalStats(int32 PartyIndex, const FU
 	Out.MaxHP = FMath::Max(1.f, Out.MaxHP + Bonus.MaxHP);
 	Out.Speed = FMath::Max(1.f, Out.Speed + Bonus.Speed);
 	Out.AttackPower = FMath::Max(1.f, Out.AttackPower + Bonus.AttackPower);
+
+	// 장착 파츠 스탯 보너스 추가 합산 
+	const FWeaponPartEffect PartEffect = GetTotalEquippedPartEffect(PartyIndex); 
+	Out.MaxHP = FMath::Max(1.f, Out.MaxHP + PartEffect.BonusMaxHP); 
+	Out.Speed = FMath::Max(1.f, Out.Speed + PartEffect.BonusSpeed); 
+	Out.AttackPower = FMath::Max(1.f, Out.AttackPower + PartEffect.BonusAttackPower); 
 	return Out;
 }

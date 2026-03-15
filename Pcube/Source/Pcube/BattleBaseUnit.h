@@ -39,10 +39,7 @@ struct FSkillRuntimeModifier
 	int32 BonusProjectileCount = 0; // 부품 시스템 - 투사체 수 증가
 	
 	UPROPERTY()
-	float DamageMulAdd = 0.f; 
-	
-	UPROPERTY()
-	float DamageMulMul = 1.f;
+	int32 BonusSkillPointGain = 0; // 기본공격 SP 획득량 + N
 };
 
 USTRUCT()

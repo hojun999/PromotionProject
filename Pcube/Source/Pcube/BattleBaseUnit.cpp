@@ -3,6 +3,8 @@
 
 #include "BattleBaseUnit.h"
 #include "SkillDataAsset.h"
+#include "AudioManagerSubsystem.h"
+#include "Kismet/GameplayStatics.h"
 #include "UnitDataAsset.h"
 #include "EquipmentSubsystem.h"
 #include "WeaponDataAsset.h"
@@ -163,9 +165,12 @@ void ABattleBaseUnit::RefreshWeaponVisual()
 
 void ABattleBaseUnit::HandleEquipmentChanged(int32 ChangedPartyIndex)
 {
+	UE_LOG(LogTemp, Warning, TEXT("[HandleEquipmentChanged] Unit=%s MyParty=%d ChangedParty=%d"),
+		*GetName(), PartyIndex, ChangedPartyIndex);
 	if (PartyIndex == INDEX_NONE) return;
 	if (ChangedPartyIndex != PartyIndex) return;
 	RefreshEquipmentVisuals();
+	RefreshBaseCombatStatsFromEquipment(false);
 }
 
 void ABattleBaseUnit::HandleEnemyHPBarChanged(float InCurrentHP, float InMaxHP)
@@ -433,7 +438,20 @@ void ABattleBaseUnit::FinishAction()
 	// 턴 종료 후 SP 획득
 	if (CurrentSkillData)
 	{
-		GainSkillPoints(CurrentSkillData->SkillPointGainOnUse);
+		int32 SPGain = CurrentSkillData->SkillPointGainOnUse;
+		// 기본공격(SkillPointGainOnUse > 0)일 때만 파츠 보너스 적용
+		if (SPGain > 0 && PartyIndex != INDEX_NONE)
+		{
+			if (const UGameInstance* GI = GetGameInstance())
+			{
+				if (const UEquipmentSubsystem* EquipSub = GI->GetSubsystem<UEquipmentSubsystem>())
+				{
+					const FWeaponPartEffect Effect = EquipSub->GetTotalEquippedPartEffect(PartyIndex);
+					SPGain += Effect.BonusSkillPointGain;
+				}
+			}
+		}
+		GainSkillPoints(SPGain);
 	}
 	
 	// 다음 턴에 이전 스킬 잔류로 포인트가 또 들어가는 문제 방지
@@ -446,6 +464,7 @@ void ABattleBaseUnit::FinishAction()
 		OnActionFinished.Broadcast();
 	}
 }
+
 
 void ABattleBaseUnit::TryFinishAction()
 {
@@ -610,6 +629,18 @@ void ABattleBaseUnit::ExecuteActionOnTargets(USkillDataAsset* SkillData, const T
 	AnimInstance->OnPlayMontageNotifyBegin.RemoveDynamic(this, &ABattleBaseUnit::HandleHitNotify);
 	AnimInstance->OnPlayMontageNotifyBegin.AddDynamic(this, &ABattleBaseUnit::HandleHitNotify);
 	
+	// 스킬 SFX 재생 
+	if (SkillData && SkillData->SkillSFX) 
+	{ 
+		if (UGameInstance* GI = GetGameInstance()) 
+		{ 
+			if (UAudioManagerSubsystem* AM = GI->GetSubsystem<UAudioManagerSubsystem>()) 
+			{ 
+				AM->PlaySFX(SkillData->SkillSFX); 
+			} 
+		} 
+	} 
+
 	// 몽타주 재생 (유닛별 오버라이드 가능)
 	const float PlayResult = AnimInstance->Montage_Play(MontageToPlay);
 	if (PlayResult <= 0.f)
@@ -630,6 +661,7 @@ void ABattleBaseUnit::ExecuteActionOnTargets(USkillDataAsset* SkillData, const T
 	EndDelegate.BindUObject(this, &ABattleBaseUnit::OnActionMontageEnded);
 	AnimInstance->Montage_SetEndDelegate(EndDelegate, MontageToPlay);
 }
+
 
 
 void ABattleBaseUnit::ApplyCurrentSkillDamage()
@@ -761,6 +793,18 @@ float ABattleBaseUnit::TakeDamage(float DamageAmount, struct FDamageEvent const&
 
 	SpawnDamageText(ActualDamage);
 
+	// 피격 SFX 재생 
+	if (UnitData && UnitData->HitSFX) 
+	{ 
+		if (UGameInstance* GI = GetGameInstance()) 
+		{ 
+			if (UAudioManagerSubsystem* AM = GI->GetSubsystem<UAudioManagerSubsystem>()) 
+			{ 
+				AM->PlaySFX(UnitData->HitSFX); 
+			} 
+		} 
+	} 
+
 	UE_LOG(LogTemp, Warning, TEXT("%s took %f damage. Remaining HP: %f/%f"), *GetName(), ActualDamage, CurrentHP, MaxHP);
 
 	// UI 갱신
@@ -778,6 +822,7 @@ float ABattleBaseUnit::TakeDamage(float DamageAmount, struct FDamageEvent const&
 
 	return ActualDamage;
 }
+
 
 void ABattleBaseUnit::Heal(float Amount)
 {
@@ -940,7 +985,6 @@ void ABattleBaseUnit::HandleNoMontageActionDelayExpired()
 FSkillRuntimeModifier ABattleBaseUnit::GetSkillRuntimeModifier(const USkillDataAsset* Skill) const
 {
 	FSkillRuntimeModifier Modifier;
-	Modifier.DamageMulMul = 1.f;
 
 	if (PartyIndex == INDEX_NONE)
 	{
@@ -954,8 +998,7 @@ FSkillRuntimeModifier ABattleBaseUnit::GetSkillRuntimeModifier(const USkillDataA
 			const FWeaponPartEffect Effect = EquipSub->GetTotalEquippedPartEffect(PartyIndex);
 			Modifier.BonusHitCount += Effect.BonusHitCount;
 			Modifier.BonusProjectileCount += Effect.BonusProjectileCount;
-			Modifier.DamageMulAdd += Effect.DamageMulAdd;
-			Modifier.DamageMulMul *= Effect.DamageMulMul;
+			Modifier.BonusSkillPointGain += Effect.BonusSkillPointGain;
 		}
 	}
 
@@ -995,7 +1038,6 @@ FSkillRuntimeSpec ABattleBaseUnit::BuildRuntimeSpec(const USkillDataAsset* Skill
 	Spec.HitCount = FMath::Max(1, Spec.HitCount + Modifier.BonusHitCount);
 	Spec.ProjectileCount = FMath::Max(1, Spec.ProjectileCount + Modifier.BonusProjectileCount);
 	
-	Spec.DamageMultiplier = (Spec.DamageMultiplier + Modifier.DamageMulAdd) * Modifier.DamageMulMul;
 	Spec.DamageMultiplier = FMath::Max(0.f, Spec.DamageMultiplier);
 	
 	return Spec;
@@ -1045,6 +1087,10 @@ void ABattleBaseUnit::RefreshBaseCombatStatsFromEquipment(bool bResetCurrentHPTo
 		return;
 	}
 
+	const float OldMaxHP = CurrentHP;
+	UE_LOG(LogTemp, Warning, TEXT("[RefreshStats] Unit=%s CurHP=%.1f OldMaxHP=%.1f PartyIdx=%d"),
+		*GetName(), CurrentHP, OldMaxHP, PartyIndex);
+	
 	FUnitBaseStats Resolved = UnitData->BaseStats;
 	if (PartyIndex != INDEX_NONE)
 	{
@@ -1057,9 +1103,10 @@ void ABattleBaseUnit::RefreshBaseCombatStatsFromEquipment(bool bResetCurrentHPTo
 			}
 		}
 	}
-
-	const float OldMaxHP = UnitData ? FMath::Max(1.f, UnitData->BaseStats.MaxHP) : 100.f;
+	
 	const float NewMaxHP = FMath::Max(1.f, Resolved.MaxHP);
+	UE_LOG(LogTemp, Warning, TEXT("[RefreshStats] Unit=%s NewMaxHP=%.1f Delta=%.1f -> CurHP=%.1f"),
+		*GetName(), NewMaxHP, NewMaxHP - OldMaxHP, CurrentHP);
 	CurrentSpeed = Resolved.Speed;
 	CurrentAttackPower = Resolved.AttackPower;
 
@@ -1069,8 +1116,17 @@ void ABattleBaseUnit::RefreshBaseCombatStatsFromEquipment(bool bResetCurrentHPTo
 	}
 	else
 	{
-		const float Ratio = (OldMaxHP > KINDA_SMALL_NUMBER) ? FMath::Clamp(CurrentHP / OldMaxHP, 0.f, 1.f) : 1.f;
-		CurrentHP = FMath::Clamp(NewMaxHP * Ratio, 0.f, NewMaxHP);
+		// MaxHP 증가분만큼 CurHP도 증가
+		const float MaxHPDelta = NewMaxHP - OldMaxHP;
+		if (MaxHPDelta > 0.f)
+		{
+			CurrentHP = FMath::Clamp(CurrentHP + MaxHPDelta, 0.f, NewMaxHP);
+		}
+		else
+		{
+			// MaxHP가 내려갔을 때는 초과하지 않게만 클램프
+			CurrentHP = FMath::Clamp(CurrentHP, 0.f, NewMaxHP);
+		}
 	}
 
 	OnHPChanged.Broadcast(CurrentHP, NewMaxHP);

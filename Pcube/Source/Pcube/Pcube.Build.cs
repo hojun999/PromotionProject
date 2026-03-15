@@ -19,7 +19,8 @@ public class Pcube : ModuleRules
 			"DeveloperSettings",
 			"CinematicCamera",
 			"Slate",
-			"SlateCore"
+			"SlateCore",
+			"NavigationSystem"
 		});
 
 		PrivateDependencyModuleNames.AddRange(new string[] {  });

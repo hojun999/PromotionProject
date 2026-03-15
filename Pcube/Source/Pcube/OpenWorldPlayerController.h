@@ -28,11 +28,20 @@ protected:
 	virtual void OnPossess(APawn* InPawn) override;
 
 	/** CCTV 전환 중 여부 - 오픈월드는 항상 false */
-	virtual bool IsCameraTransitionBusy() const override; // 추가됨
+	virtual bool IsCameraTransitionBusy() const override;
 
 private:
 	/** 폰을 뷰타겟으로 설정. 폰이 준비되기 전이면 타이머로 재시도 */
 	void TrySetPawnView(); // 추가됨
 
 	FTimerHandle TimerHandle_TrySetPawnView; // 추가됨
+	
+public:
+	// CCTV 뷰 전환/복귀
+	void SwitchToCCTVView(AActor* CCTVDirector, float BlendTime = 0.75f);
+	void RestorePawnCamera(float BlendTime = 0.75f);
+
+	UPROPERTY(BlueprintReadOnly, Category="Camera")
+	bool bIsInCCTVView = false;
+
 };

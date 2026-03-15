@@ -13,15 +13,11 @@ FText UWeaponPartDataAsset::BuildEffectText() const
 	}
 	if (Effect.BonusHitCount != 0)
 	{
-		Lines.Add(FString::Printf(TEXT("공격 횟수 %+d"), Effect.BonusHitCount));
+		Lines.Add(FString::Printf(TEXT("타수 %+d"), Effect.BonusHitCount));
 	}
-	if (!FMath::IsNearlyZero(Effect.DamageMulAdd))
+	if (Effect.BonusSkillPointGain != 0)
 	{
-		Lines.Add(FString::Printf(TEXT("데미지 배율 %+0.2f"), Effect.DamageMulAdd));
-	}
-	if (!FMath::IsNearlyEqual(Effect.DamageMulMul, 1.f))
-	{
-		Lines.Add(FString::Printf(TEXT("데미지 배율 x%0.2f"), Effect.DamageMulMul));
+		Lines.Add(FString::Printf(TEXT("SP 추가 획득 %d"), Effect.BonusSkillPointGain));
 	}
 	
 	if (Lines.Num() == 0)

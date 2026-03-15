@@ -4,6 +4,7 @@
 
 #include "CoreMinimal.h"
 #include "BaseHUD.h"
+#include "Sound/SoundBase.h"
 #include "WorldHUD.generated.h"
 
 class ULootWindowWidget;
@@ -24,6 +25,10 @@ public:
 	void ShowLootWindow(ALootCorpseActor* Corpse); // 시체 대상 루팅 UI 표시
 	void HideLootWindow(); // 루팅 UI 숨김 + 입력 복구
 	
+	// 루팅 가능 범위 진입/퇴장 시 프롬프트 이미지 표시/숨김
+	void ShowLootPrompt();
+	void HideLootPrompt();
+	
 	// --- 인벤토리 / 플레이어 정보창 ---
 	void ToggleInventory(); // I
 	void TogglePlayerInfo(); // Tab
@@ -39,9 +44,22 @@ public:
 	void HideAllPanels(); // UI 간의 충돌 방지
 	void SetWorldInputBlocked(bool bBlocked);
 	
+public:
+	// 레벨 BGM (에디터 BP_WorldHUD 에서 할당)
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Audio")
+	TObjectPtr<USoundBase> LevelBGMSound = nullptr;
+
+	// Tab/I/E 키 힌트 위젯 - 항상 화면에 표시
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="UI")
+	TSubclassOf<UUserWidget> KeyHintWidgetClass = nullptr;
+	
 private:
 	UPROPERTY(EditDefaultsOnly, Category="UI")
 	TSubclassOf<ULootWindowWidget> LootWindowClass;
+	
+	// 루팅 가능 범위 프롬프트 위젯 (E 버튼 이미지 등)
+	UPROPERTY(EditDefaultsOnly, Category="UI")
+	TSubclassOf<UUserWidget> LootPromptWidgetClass;
 	
 	UPROPERTY(EditDefaultsOnly, Category="UI")
 	TSubclassOf<UInventoryWindowWidget> InventoryWindowClass;
@@ -51,7 +69,13 @@ private:
 	
 private:
 	UPROPERTY()
+	TObjectPtr<UUserWidget> KeyHintWidget = nullptr;
+	
+	UPROPERTY()
 	TObjectPtr<ULootWindowWidget> LootWindow = nullptr; // 루팅 창 인스턴스
+	
+	UPROPERTY()
+	TObjectPtr<UUserWidget> LootPromptWidget = nullptr;
 	
 	UPROPERTY()
 	TObjectPtr<UInventoryWindowWidget> InventoryWindow = nullptr; // 인벤토리 창 인스턴스

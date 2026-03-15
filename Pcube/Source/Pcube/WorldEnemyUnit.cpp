@@ -1,7 +1,7 @@
 // Fill out your copyright notice in the Description page of Project Settings.
 
-
 #include "WorldEnemyUnit.h"
+#include "WorldHUD.h"
 #include "BattleInfoTransferSubsystem.h"
 #include "SpawnDataAsset.h"
 #include "UnitDataAsset.h"
@@ -11,25 +11,27 @@
 #include "Components/CapsuleComponent.h"
 #include "Kismet/GameplayStatics.h"
 #include "GameFramework/CharacterMovementComponent.h"
-//#include "Blueprint/AIBlueprintHelperLibrary.h"
+#include "NavigationSystem.h"
+#include "Navigation/PathFollowingComponent.h"
+#include "Blueprint/AIBlueprintHelperLibrary.h"
 
 AWorldEnemyUnit::AWorldEnemyUnit()
 {
+	PrimaryActorTick.bCanEverTick = true; // Tick 활성화
+
 	// 감지용 collision
 	DetectSphere = CreateDefaultSubobject<USphereComponent>(TEXT("DetectSphere"));
 	DetectSphere->SetupAttachment(RootComponent);
-	DetectSphere->SetSphereRadius(400.f);	// 감지 범위 설정
-	//  감지 component는 물리적 충돌 없이 overlap만 판정
+	DetectSphere->SetSphereRadius(400.f);
 	DetectSphere->SetCollisionResponseToAllChannels(ECR_Ignore);
 	DetectSphere->SetCollisionResponseToChannel(ECC_Pawn, ECR_Overlap);
-	
-	// 본체 collision (전투 진입-레벨 전환 범위)
+
+	// 본체 collision (전투 진입 범위)
 	GetCapsuleComponent()->SetCollisionResponseToChannel(ECC_Pawn, ECR_Overlap);
-	
-	// 시체 메시는 캡슐(RootComponent)에 부착
+
+	// 시체 메시
 	DeadStaticMeshComp = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("DeadStaticMeshComp"));
 	DeadStaticMeshComp->SetupAttachment(RootComponent);
-	
 	DeadStaticMeshComp->SetHiddenInGame(true);
 	DeadStaticMeshComp->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 }
@@ -37,13 +39,14 @@ AWorldEnemyUnit::AWorldEnemyUnit()
 void AWorldEnemyUnit::BeginPlay()
 {
 	Super::BeginPlay();
-	
-	// 로드 직후 즉시 오버랩 전부 꺼두기
+
+	// 로드 직후 오버랩 전부 꺼두기
 	if (DetectSphere)
 	{
 		DetectSphere->SetGenerateOverlapEvents(false);
 		DetectSphere->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 		DetectSphere->OnComponentBeginOverlap.RemoveDynamic(this, &AWorldEnemyUnit::OnDetectOverlap);
+		DetectSphere->OnComponentEndOverlap.RemoveDynamic(this, &AWorldEnemyUnit::OnDetectEndOverlap);
 	}
 
 	if (UCapsuleComponent* Cap = GetCapsuleComponent())
@@ -52,17 +55,17 @@ void AWorldEnemyUnit::BeginPlay()
 		Cap->OnComponentBeginOverlap.RemoveDynamic(this, &AWorldEnemyUnit::OnEncounterOverlap);
 		Cap->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
 	}
-	
+
 	// defeated 체크
 	if (UGameInstance* GI = GetGameInstance())
 	{
 		if (UBattleInfoTransferSubsystem* Transfer = GI->GetSubsystem<UBattleInfoTransferSubsystem>())
 		{
 			const bool bDefeated = Transfer->IsEncounterDefeated(EncounterID);
-			
+
 			UE_LOG(LogTemp, Warning, TEXT("[WorldEnemy] BeginPlay %s EncounterID=%s defeated=%d"),
 				*GetName(), *EncounterID.ToString(), bDefeated ? 1 : 0);
-			
+
 			if (bDefeated)
 			{
 				if (TrySpawnCorpseIfDefeated())
@@ -72,35 +75,222 @@ void AWorldEnemyUnit::BeginPlay()
 			}
 		}
 	}
-	
-	// 살아있을 때만 오버랩 키고 바인딩
+
+	// 살아있을 때만 오버랩 + 순찰 시작
 	if (DetectSphere)
 	{
 		DetectSphere->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
 		DetectSphere->SetGenerateOverlapEvents(true);
 		DetectSphere->OnComponentBeginOverlap.AddDynamic(this, &AWorldEnemyUnit::OnDetectOverlap);
+		DetectSphere->OnComponentEndOverlap.AddDynamic(this, &AWorldEnemyUnit::OnDetectEndOverlap);
 	}
 
 	if (UCapsuleComponent* Cap = GetCapsuleComponent())
 	{
 		Cap->SetGenerateOverlapEvents(true);
 		Cap->OnComponentBeginOverlap.AddDynamic(this, &AWorldEnemyUnit::OnEncounterOverlap);
-		// Pawn 오버랩만 허용(기존 설정 유지)
 		Cap->SetCollisionResponseToChannel(ECC_Pawn, ECR_Overlap);
+	}
+
+	// 0번 인덱스에서 시작
+	CurrentPatrolIndex = 0;
+	PatrolDirection = 1;
+	SetAIState(PatrolPoints.Num() > 0 ? EEnemyAIState::Patrol : EEnemyAIState::Idle);
+}
+
+void AWorldEnemyUnit::Tick(float DeltaTime)
+{
+	Super::Tick(DeltaTime);
+
+	if (bIsCorpse || bEncounterLocked) return;
+
+	switch (AIState)
+	{
+	case EEnemyAIState::Patrol:
+		UpdatePatrol(DeltaTime);
+		break;
+	case EEnemyAIState::Chase:
+		UpdateChase(DeltaTime);
+		break;
+	case EEnemyAIState::Idle:
+	default:
+		break;
+	}
+}
+
+// ── AI 상태 변경 ──────────────────────────────────────────────
+
+void AWorldEnemyUnit::SetAIState(EEnemyAIState NewState)
+{
+	if (AIState == NewState) return;
+	AIState = NewState;
+
+	if (UCharacterMovementComponent* MoveComp = GetCharacterMovement())
+	{
+		switch (NewState)
+		{
+		case EEnemyAIState::Patrol:
+			MoveComp->MaxWalkSpeed = PatrolSpeed;
+			MoveToNextPatrolPoint(); // 상태 전환 즉시 이동 시작
+			break;
+		case EEnemyAIState::Chase:
+			MoveComp->MaxWalkSpeed = ChaseSpeed;
+			break;
+		case EEnemyAIState::Idle:
+			MoveComp->StopMovementImmediately();
+			break;
+		}
+	}
+}
+
+void AWorldEnemyUnit::MoveToNextPatrolPoint()
+{
+	if (PatrolPoints.Num() == 0) return;
+	AAIController* Ctrl = Cast<AAIController>(GetController());
+	if (!Ctrl) return;
+
+	// 이동 완료 델리게이트 바인딩
+	Ctrl->ReceiveMoveCompleted.RemoveDynamic(this, &AWorldEnemyUnit::OnPatrolMoveCompleted);
+	Ctrl->ReceiveMoveCompleted.AddDynamic(this, &AWorldEnemyUnit::OnPatrolMoveCompleted);
+	bWaitingForPatrolMove = true;
+
+	FVector Dest = PatrolPoints[CurrentPatrolIndex];
+
+	// 입력된 Z 좌표와 무관하게 NavMesh 위 실제 바닥 위치로 보정
+	if (UNavigationSystemV1* NavSys = UNavigationSystemV1::GetCurrent(GetWorld()))
+	{
+		FNavLocation ProjectedLoc;
+		if (NavSys->ProjectPointToNavigation(Dest, ProjectedLoc, FVector(50.f, 50.f, 500.f)))
+		{
+			Dest = ProjectedLoc.Location;
+		}
+	}
+
+	UAIBlueprintHelperLibrary::SimpleMoveToLocation(Ctrl, Dest);
+}
+
+void AWorldEnemyUnit::OnPatrolMoveCompleted(FAIRequestID RequestID, EPathFollowingResult::Type Result)
+{
+	bWaitingForPatrolMove = false;
+
+	if (AIState != EEnemyAIState::Patrol) return;
+	if (bIsCorpse || bEncounterLocked) return;
+	if (Result != EPathFollowingResult::Success) return;
+
+	const int32 NextIndex = CurrentPatrolIndex + PatrolDirection;
+	if (NextIndex < 0 || NextIndex >= PatrolPoints.Num())
+	{
+		PatrolDirection *= -1;
+	}
+	const int32 NewIndex = FMath::Clamp(CurrentPatrolIndex + PatrolDirection, 0, PatrolPoints.Num() - 1);
+	if (NewIndex != CurrentPatrolIndex)
+	{
+		CurrentPatrolIndex = NewIndex;
+		MoveToNextPatrolPoint();
+	}
+}
+
+// ── 순찰 ──────────────────────────────────────────────────────
+
+void AWorldEnemyUnit::UpdatePatrol(float DeltaTime)
+{
+	if (PatrolPoints.Num() == 0)
+	{
+		SetAIState(EEnemyAIState::Idle);
+		return;
+	}
+
+	// OnPatrolMoveCompleted 델리게이트로 도착 처리
+	// 이동 명령이 없는 상태면 (시작 직후 등) 다시 명령
+	if (!bWaitingForPatrolMove)
+	{
+		MoveToNextPatrolPoint();
+	}
+}
+
+// ── 추격 ──────────────────────────────────────────────────────
+
+void AWorldEnemyUnit::UpdateChase(float DeltaTime)
+{
+	AActor* Target = ChaseTarget.Get();
+
+	if (!IsValid(Target))
+	{
+		ChaseTarget = nullptr;
+		CurrentPatrolIndex = 0; // 순찰 복귀 시 0번부터 재시작
+		PatrolDirection = 1;
+		SetAIState(PatrolPoints.Num() > 0 ? EEnemyAIState::Patrol : EEnemyAIState::Idle);
+		return;
+	}
+
+	// 추격은 매 틱 위치가 바뀌므로 지속적으로 이동 명령 갱신
+	UAIBlueprintHelperLibrary::SimpleMoveToLocation(GetController(), Target->GetActorLocation());
+}
+
+
+// ── 감지 이벤트 ───────────────────────────────────────────────
+
+void AWorldEnemyUnit::OnDetectOverlap(UPrimitiveComponent* OverlappedComponent, AActor* OtherActor,
+									   UPrimitiveComponent* OtherComp, int32 OtherBodyIndex,
+									   bool bFromSweep, const FHitResult& SweepResult)
+{
+	if (bIsCorpse || bEncounterLocked) return;
+
+	AWorldAllyUnit* Player = Cast<AWorldAllyUnit>(OtherActor);
+	if (!Player) return;
+
+	UE_LOG(LogTemp, Warning, TEXT("[WorldEnemy] Detected player: %s -> Chase"), *Player->GetName());
+
+	ChaseTarget = Player;
+	SetAIState(EEnemyAIState::Chase);
+}
+
+void AWorldEnemyUnit::OnDetectEndOverlap(UPrimitiveComponent* OverlappedComponent, AActor* OtherActor,
+										  UPrimitiveComponent* OtherComp, int32 OtherBodyIndex)
+{
+	if (OtherActor && OtherActor == ChaseTarget.Get())
+	{
+		UE_LOG(LogTemp, Warning, TEXT("[WorldEnemy] Player left detect range -> Patrol"));
+		ChaseTarget = nullptr;
+		CurrentPatrolIndex = 0; // 순찰 복귀 시 0번부터 재시작
+		PatrolDirection = 1;
+		SetAIState(PatrolPoints.Num() > 0 ? EEnemyAIState::Patrol : EEnemyAIState::Idle);
+	}
+}
+
+// ── 인카운터 ──────────────────────────────────────────────────
+
+void AWorldEnemyUnit::OnEncounterOverlap(UPrimitiveComponent* OverlappedComponent, AActor* OtherActor,
+										  UPrimitiveComponent* OtherComp, int32 OtherBodyIndex,
+										  bool bFromSweep, const FHitResult& SweepResult)
+{
+	if (bIsCorpse || bEncounterLocked) return;
+
+	if (UGameInstance* GI = GetGameInstance())
+	{
+		if (auto* Transfer = GI->GetSubsystem<UBattleInfoTransferSubsystem>())
+		{
+			if (Transfer->IsEncounterDefeated(EncounterID)) return;
+		}
+	}
+
+	if (OtherActor && OtherActor->IsA(AWorldAllyUnit::StaticClass()))
+	{
+		StartEncounter(OtherActor);
 	}
 }
 
 void AWorldEnemyUnit::InitFromUnitData(UUnitDataAsset* InUnitData)
 {
 	Super::InitFromUnitData(InUnitData);
-	
+
 	if (!UnitData || !DeadStaticMeshComp) return;
-	
+
 	if (UnitData->DeadStaticMesh)
 	{
 		DeadStaticMeshComp->SetStaticMesh(UnitData->DeadStaticMesh);
 	}
-	
+
 	DeadStaticMeshComp->SetHiddenInGame(true);
 }
 
@@ -108,75 +298,30 @@ void AWorldEnemyUnit::InitializeEncounterInfo(FName InEncounterID, UUnitDataAsse
 {
 	EncounterID = InEncounterID;
 	SpawnData = InSpawnData;
-	
+
 	InitFromUnitData(InUnitData);
-	
+
 	if (bAlreadyDefeated)
 	{
 		ConvertToCorpse();
 	}
 }
 
-// 플레이어 발견 시 로직 - sphere에 닿은 경우
-void AWorldEnemyUnit::OnDetectOverlap(UPrimitiveComponent* OverlappedComponent, AActor* OtherActor, 
-									  UPrimitiveComponent* OtherComp, int32 OtherBodyIndex, 
-									  bool bFromSweep, const FHitResult& SweepResult)
-{
-	AWorldAllyUnit* Player = Cast<AWorldAllyUnit>(OtherActor);
-	
-	if (Player)
-	{
-		UE_LOG(LogTemp, Warning, TEXT("플레이어 감지: %s"), *Player->GetName());
-		
-		// (아래 로직 이후에 수정 가능성 있음) TODO: 추격 AI 로직을 작성, AI controller를 사용하여 Player를 향해 MoveTo 실행
-		// if (GetController())
-		// {
-		// 	UAIBlueprintHelperLibrary::SimpleMoveToActor(GetController(), Player);
-		// }
-	}
-}
-
-// 플레이어와 충돌 시 로직 - capsule에 닿은 경우
-void AWorldEnemyUnit::OnEncounterOverlap(UPrimitiveComponent* OverlappedComponent, AActor* OtherActor,
-										UPrimitiveComponent* OtherComp, int32 OtherBodyIndex,
-										bool bFromSweep, const FHitResult& SweepResult)
-{
-	// 시체의 경우 전투 재시작 방지
-	if (bIsCorpse || bEncounterLocked) return;
-	
-	if (UGameInstance* GI = GetGameInstance())
-	{
-		if (auto* Transfer = GI->GetSubsystem<UBattleInfoTransferSubsystem>())
-		{
-			if (Transfer->IsEncounterDefeated(EncounterID))
-			{
-				return;
-			}
-		}
-	}
-	
-	if (OtherActor && OtherActor->IsA(AWorldAllyUnit::StaticClass()))
-	{
-		StartEncounter(OtherActor);
-	}
-}
-
-
 void AWorldEnemyUnit::StartEncounter(AActor* PlayerActor)
 {
 	UE_LOG(LogTemp, Warning, TEXT("[WorldEnemy] StartEncounter name=%s id=%s locked=%d corpse=%d"),
-	*GetName(), *EncounterID.ToString(), bEncounterLocked?1:0, bIsCorpse?1:0);
-	
+		*GetName(), *EncounterID.ToString(), bEncounterLocked ? 1 : 0, bIsCorpse ? 1 : 0);
+
 	if (bIsCorpse || bEncounterLocked) return;
 	bEncounterLocked = true;
-	
-	if (!SpawnData  || !UnitData)
+
+	if (!SpawnData || !UnitData)
 	{
 		UE_LOG(LogTemp, Error, TEXT("[%s] 데이터 에셋 할당 확인 필요!"), *GetName());
 		return;
 	}
-	
-	// 오버랩이 또 들어와도 전투 재호출 안 되게 즉시 차단
+
+	// 충돌 즉시 차단
 	if (DetectSphere)
 	{
 		DetectSphere->SetGenerateOverlapEvents(false);
@@ -187,28 +332,23 @@ void AWorldEnemyUnit::StartEncounter(AActor* PlayerActor)
 		Cap->SetGenerateOverlapEvents(false);
 		Cap->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 	}
-	
+
 	UGameInstance* GI = GetGameInstance();
 	if (!GI) return;
-	
+
 	UBattleInfoTransferSubsystem* Transfer = GI->GetSubsystem<UBattleInfoTransferSubsystem>();
 	if (!Transfer) return;
-	
+
 	if (EncounterID == NAME_None)
 	{
-		UE_LOG(LogTemp, Error, TEXT("[WorldEnemy] EncounterID is None. Defeat tracking will fail."));
+		UE_LOG(LogTemp, Error, TEXT("[WorldEnemy] EncounterID is None."));
 	}
-	
-	// 1. ReturnWorldLevel 결정
+
 	const FName WorldLevelName(*UGameplayStatics::GetCurrentLevelName(this, true));
-	
-	// 2. PendingEncounter 세팅
-	Transfer->SetPendingEncounter(EncounterID, WorldLevelName);
-	
-	// 3. 월드 복귀 위치 저장 (Consume 대상)
+	Transfer->SetPendingEncounter(EncounterID, WorldLevelName, bIsBossEncounter);
+	Transfer->SetEnemyWorldTransform(GetActorTransform()); // 전투 시작 전 적 위치 저장
 	Transfer->SetReturnPoint(WorldLevelName, PlayerActor->GetActorLocation(), PlayerActor->GetActorRotation());
-	
-	// 4. 적 스폰 정보 저장
+
 	const FEnemySpawnGroup* Group = nullptr;
 	for (const FEnemySpawnGroup& G : SpawnData->SpawnGroups)
 	{
@@ -221,16 +361,15 @@ void AWorldEnemyUnit::StartEncounter(AActor* PlayerActor)
 	if (!Group && SpawnData->SpawnGroups.Num() > 0)
 	{
 		Group = &SpawnData->SpawnGroups[0];
-		UE_LOG(LogTemp, Warning, TEXT("[WorldEnemy] SpawnGroup not found by EncounterID=%s. Fallback to index0."), *EncounterID.ToString());
+		UE_LOG(LogTemp, Warning, TEXT("[WorldEnemy] SpawnGroup fallback to index0."));
 	}
-	
+
 	if (Group)
 	{
 		Transfer->InitEnemyBattleInfo(Group->EnemyList);
 		Transfer->SetPendingLootConfig(Group->LootRolls, Group->LootTable, Group->GuaranteedLoot);
 	}
 
-	// 5. 전투 레벨 이동
 	UGameplayStatics::OpenLevel(this, FName("L_Battle"));
 }
 
@@ -238,49 +377,42 @@ void AWorldEnemyUnit::ConvertToCorpse()
 {
 	if (bIsCorpse) return;
 	bIsCorpse = true;
-	
-	// 1. 감지 스피어 비활성화
+
 	if (DetectSphere)
 	{
 		DetectSphere->SetGenerateOverlapEvents(false);
 		DetectSphere->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 		DetectSphere->OnComponentBeginOverlap.RemoveDynamic(this, &AWorldEnemyUnit::OnDetectOverlap);
+		DetectSphere->OnComponentEndOverlap.RemoveDynamic(this, &AWorldEnemyUnit::OnDetectEndOverlap);
 	}
-	
-	// 2. 전투 트리거 비활성화
+
 	if (UCapsuleComponent* CapComp = GetCapsuleComponent())
 	{
 		CapComp->SetGenerateOverlapEvents(false);
 		CapComp->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 		CapComp->OnComponentBeginOverlap.RemoveDynamic(this, &AWorldEnemyUnit::OnEncounterOverlap);
 	}
-	
-	// 3. 이동/AI 정지
+
 	if (UCharacterMovementComponent* MoveComp = GetCharacterMovement())
 	{
 		MoveComp->DisableMovement();
 	}
-	
-	// 4. 살아있을 때 쓰던 메시 끄기
+
 	if (USkeletalMeshComponent* MeshComp = GetMesh())
 	{
 		MeshComp->SetHiddenInGame(true);
 		MeshComp->SetComponentTickEnabled(false);
 		MeshComp->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 	}
-	
-	// 5. 시체 메시 켜기
+
 	if (DeadStaticMeshComp)
 	{
 		DeadStaticMeshComp->SetHiddenInGame(false);
-		
-		// 루팅/클릭 상호작용할 거면 QueryOnly로
 		DeadStaticMeshComp->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
 		DeadStaticMeshComp->SetCollisionResponseToAllChannels(ECR_Ignore);
 		DeadStaticMeshComp->SetCollisionResponseToChannel(ECC_Visibility, ECR_Block);
 	}
-	
-	// 6. 상호작용 박스 설정
+
 	if (!InteractBox)
 	{
 		InteractBox = NewObject<UBoxComponent>(this, TEXT("InteractBox"));
@@ -292,23 +424,29 @@ void AWorldEnemyUnit::ConvertToCorpse()
 		InteractBox->SetCollisionResponseToChannel(ECC_Pawn, ECR_Overlap);
 		InteractBox->OnComponentBeginOverlap.AddDynamic(this, &AWorldEnemyUnit::OnCorpseBeginOverlap);
 		InteractBox->OnComponentEndOverlap.AddDynamic(this, &AWorldEnemyUnit::OnCorpseEndOverlap);
-	}	
+	}
 }
 
-void AWorldEnemyUnit::OnCorpseBeginOverlap(UPrimitiveComponent* Overlapped, AActor* OtherActor, 
+void AWorldEnemyUnit::OnCorpseBeginOverlap(UPrimitiveComponent* Overlapped, AActor* OtherActor,
 	UPrimitiveComponent* OtherComp, int32 OtherBodyIndex, bool bFromSweep, const FHitResult& Sweep)
 {
 	APawn* Pawn = Cast<APawn>(OtherActor);
 	if (!Pawn) return;
-	
+
 	APlayerController* PC = Cast<APlayerController>(Pawn->GetController());
 	if (!PC) return;
-	
+
 	EnableInput(PC);
-	
+
 	if (InputComponent)
 	{
 		InputComponent->BindKey(EKeys::E, IE_Pressed, this, &AWorldEnemyUnit::Loot);
+	}
+
+	// 루팅 프롬프트 이미지 표시
+	if (AWorldHUD* WHUD = Cast<AWorldHUD>(PC->GetHUD()))
+	{
+		WHUD->ShowLootPrompt();
 	}
 	
 	if (GEngine)
@@ -317,85 +455,93 @@ void AWorldEnemyUnit::OnCorpseBeginOverlap(UPrimitiveComponent* Overlapped, AAct
 	}
 }
 
-
-void AWorldEnemyUnit::OnCorpseEndOverlap(UPrimitiveComponent* Overlapped, AActor* OtherActor, UPrimitiveComponent* OtherComp, int32 OtherBodyIndex)
+void AWorldEnemyUnit::OnCorpseEndOverlap(UPrimitiveComponent* Overlapped, AActor* OtherActor,
+	UPrimitiveComponent* OtherComp, int32 OtherBodyIndex)
 {
 	APawn* Pawn = Cast<APawn>(OtherActor);
 	if (!Pawn) return;
-	
+
 	APlayerController* PC = Cast<APlayerController>(Pawn->GetController());
 	if (!PC) return;
-	
+
 	DisableInput(PC);
+	
+	// 루팅 프롬프트 이미지 숨김
+	if (AWorldHUD* WHUD = Cast<AWorldHUD>(PC->GetHUD()))
+	{
+		WHUD->HideLootPrompt();
+	}
 }
 
 void AWorldEnemyUnit::Loot()
 {
 	if (!bIsCorpse) return;
-	
+
 	UE_LOG(LogTemp, Warning, TEXT("[Loot] Player looted corpse: %s"), *GetName());
-	
+
 	if (GEngine)
 	{
 		GEngine->AddOnScreenDebugMessage(-1, 2.0f, FColor::Cyan, TEXT("[Loot] Items acquired (prototype)"));
 	}
-	
-	// 프로토타입: 루팅 후 제거
+
 	Destroy();
 }
 
 bool AWorldEnemyUnit::TrySpawnCorpseIfDefeated()
 {
 	if (EncounterID == NAME_None) return false;
-	
+
 	UGameInstance* GI = GetGameInstance();
 	if (!GI) return false;
-	
+
 	UBattleInfoTransferSubsystem* Transfer = GI->GetSubsystem<UBattleInfoTransferSubsystem>();
 	if (!Transfer) return false;
-	
-	if(Transfer->IsEncounterLooted(EncounterID))
+
+	if (Transfer->IsEncounterLooted(EncounterID))
 	{
 		Destroy();
 		return true;
 	}
-	
-	// 잔여 루팅 복원
+
 	TArray<FLootStack> Loot;
 	Transfer->TryGetEncounterLoot(EncounterID, Loot);
-	
-	// if (!bHasSavedLoot)
-	// {
-	// 	UE_LOG(LogTemp, Warning, TEXT("[WorldEnemy] Defeated but no saved loot. EncounterID=%s (Did battle call SetEncounterLoot?)"),
-	// 		*EncounterID.ToString());
-	// 	// Loot 비어있는 상태로 스폰할지/아예 스폰 안할지는 선택
-	// 	// 지금은 스폰하도록 두면 디버깅 쉬울듯
-	// }
-	
-	// 시체 스폰
+
 	if (LootCorpseClass)
 	{
 		FActorSpawnParameters SpawnParams;
 		SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
-		
-		ALootCorpseActor* Corpse = GetWorld()->SpawnActor<ALootCorpseActor>(LootCorpseClass, GetActorTransform(), SpawnParams);
+
+		// 전투 시작 전 저장된 적 위치 사용, 없으면 현재 위치 fallback
+		FTransform SpawnTransform = GetActorTransform();
+		if (Transfer->TryGetEnemyWorldTransform(SpawnTransform))
+		{
+			Transfer->ClearEnemyWorldTransform();
+		}
+
+		// NavMesh로 Z 보정 - 항상 바닥에 붙어서 스폰
+		if (UNavigationSystemV1* NavSys = UNavigationSystemV1::GetCurrent(GetWorld()))
+		{
+			FNavLocation ProjectedLoc;
+			if (NavSys->ProjectPointToNavigation(
+				SpawnTransform.GetLocation(),
+				ProjectedLoc,
+				FVector(50.f, 50.f, 500.f)))
+			{
+				SpawnTransform.SetLocation(ProjectedLoc.Location);
+			}
+		}
+
+		ALootCorpseActor* Corpse = GetWorld()->SpawnActor<ALootCorpseActor>(
+			LootCorpseClass, SpawnTransform, SpawnParams);
+
 		if (Corpse)
 		{
-			// 시체 메쉬 공급 방식:
-			// 1. UnitData->DeadStaticMesh 쓰는 방식 유지 - 적마다 다른 시체
-			// 2. 혹은 LootCorpseActor BP에 디폴트 메시 박아두고 여기서는 nullptr 넘기기
-			UStaticMesh* CorpseMesh = nullptr;
-			
-			// UnitData는 base/derived 중 하나로 통일 필요 
-			if (UnitData && UnitData->DeadStaticMesh)
-			{
-				CorpseMesh = UnitData->DeadStaticMesh;
-			}
-			
+			UStaticMesh* CorpseMesh = (UnitData && UnitData->DeadStaticMesh) ? UnitData->DeadStaticMesh : nullptr;
 			Corpse->InitCorpse(EncounterID, CorpseMesh, Loot);
 		}
 	}
-	
+
 	Destroy();
 	return true;
 }
+

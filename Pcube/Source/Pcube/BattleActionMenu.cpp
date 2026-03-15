@@ -164,11 +164,13 @@ void UBattleActionMenu::UpdateMenuPosition()
 	APlayerController* PC = GetOwningPlayer();
 	if (!PC) return;
 	
-	FVector2D ScreenPosition;
 	const FVector WorldLocation = CurrentUnit->UIAnchorPoint->GetComponentLocation();
 	
-	const bool bProjected = 
-		UWidgetLayoutLibrary::ProjectWorldLocationToWidgetPosition(PC, WorldLocation, ScreenPosition, true);
+	// ProjectWorldLocationToWidgetPosition(bPlayerViewportRelative=false) 로
+	// 슬레이트 좌표(DPI 스케일 적용) 직접 획득
+	FVector2D ScreenPosition;
+	const bool bProjected =
+		UWidgetLayoutLibrary::ProjectWorldLocationToWidgetPosition(PC, WorldLocation, ScreenPosition, false);
 	
 	if (!bProjected)
 	{
@@ -177,16 +179,20 @@ void UBattleActionMenu::UpdateMenuPosition()
 		return;
 	}
 	
-	// 화면 밖으로 나가면 클램프
+	// 뷰포트 크기를 DPI 스케일 적용된 슬레이트 기준으로 획득
 	int32 VX = 0, VY = 0;
 	PC->GetViewportSize(VX, VY);
-	
+	const float DPIScale = UWidgetLayoutLibrary::GetViewportScale(PC);
+	const float SlateW = (DPIScale > 0.f) ? VX / DPIScale : (float)VX;
+	const float SlateH = (DPIScale > 0.f) ? VY / DPIScale : (float)VY;
+
 	const float Margin = 20.f;
-	ScreenPosition.X = FMath::Clamp(ScreenPosition.X, Margin, (float)VX - Margin);
-	ScreenPosition.Y = FMath::Clamp(ScreenPosition.Y, Margin, (float)VY - Margin);
+	ScreenPosition.X = FMath::Clamp(ScreenPosition.X, Margin, SlateW - Margin);
+	ScreenPosition.Y = FMath::Clamp(ScreenPosition.Y, Margin, SlateH - Margin);
 	
 	SetPositionInViewport(ScreenPosition, false);
 }
+
 
 void UBattleActionMenu::NativeTick(const FGeometry& MyGeometry, float InDeltaTime)
 {

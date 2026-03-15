@@ -7,13 +7,37 @@
 #include "InventoryWindowWidget.h"
 #include "PlayerInfoWindowWidget.h"
 #include "Blueprint/UserWidget.h"
+#include  "AudioManagerSubsystem.h"
+#include  "Kismet/GameplayStatics.h"
 
 void AWorldHUD::BeginPlay()
 {
 	Super::BeginPlay();
-	
+
+	if (LevelBGMSound)
+	{
+		if (UGameInstance* GI = GetGameInstance())
+		{
+			if (UAudioManagerSubsystem* AM = GI->GetSubsystem<UAudioManagerSubsystem>())
+			{
+				AM->PlayBGM(LevelBGMSound);
+			}
+		}
+	}
+
 	APlayerController* PC = GetOwningPlayerController();
 	if (!PC) return;
+	
+	// 루팅 프롬프트 위젯 생성 // 추가됨
+	if (LootPromptWidgetClass)
+	{
+		LootPromptWidget = CreateWidget<UUserWidget>(PC, LootPromptWidgetClass);
+		if (LootPromptWidget)
+		{
+			LootPromptWidget->AddToViewport(60); // LootWindow보다 아래 ZOrder
+			LootPromptWidget->SetVisibility(ESlateVisibility::Collapsed);
+		}
+	}
 	
 	if (LootWindowClass)
 	{
@@ -42,6 +66,17 @@ void AWorldHUD::BeginPlay()
 		{
 			PlayerInfoWindow->AddToViewport(40);
 			PlayerInfoWindow->SetVisibility(ESlateVisibility::Collapsed);
+		}
+	}
+	
+	// 키 힌트 위젯 생성 - 항상 화면에 표시 // 추가됨
+	if (KeyHintWidgetClass)
+	{
+		KeyHintWidget = CreateWidget<UUserWidget>(PC, KeyHintWidgetClass);
+		if (KeyHintWidget)
+		{
+			KeyHintWidget->AddToViewport(10);
+			KeyHintWidget->SetVisibility(ESlateVisibility::HitTestInvisible);
 		}
 	}
 }
@@ -115,6 +150,23 @@ void AWorldHUD::HideLootWindow()
 	ApplyInputMode_GameOnly();
 	SetWorldInputBlocked(false);
 }
+
+void AWorldHUD::ShowLootPrompt()
+{
+	if (LootPromptWidget)
+	{
+		LootPromptWidget->SetVisibility(ESlateVisibility::Visible);
+	}
+}
+
+void AWorldHUD::HideLootPrompt()
+{
+	if (LootPromptWidget)
+	{
+		LootPromptWidget->SetVisibility(ESlateVisibility::Collapsed);
+	}
+}
+
 
 void AWorldHUD::ToggleInventory()
 {

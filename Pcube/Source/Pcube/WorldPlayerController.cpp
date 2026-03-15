@@ -2,6 +2,7 @@
 
 #include "WorldCCTVCameraDirector.h"
 #include "WorldHUD.h"
+#include "BaseHUD.h"
 #include "EngineUtils.h"
 
 AWorldPlayerController::AWorldPlayerController()
@@ -115,5 +116,24 @@ void AWorldPlayerController::Input_CloseUI()
 	if (AWorldHUD* WHUD = Cast<AWorldHUD>(GetHUD()))
 	{
 		WHUD->CloseAnyOpenPanel();
+	}
+	
+	// 설정창이 열려있으면 닫기 우선 
+	if (ABaseHUD* BaseHUD = Cast<ABaseHUD>(GetHUD())) 
+	{
+		if (BaseHUD->IsSettingsOpen()) 
+		{
+			BaseHUD->ToggleSettings(); 
+			return; 
+		}
+	}
+
+	// 설정창 닫혀있으면 설정창 열기, 다른 UI도 없으면 
+	if (AWorldHUD* WHUD = Cast<AWorldHUD>(GetHUD()))
+	{
+		if (!WHUD->CloseAnyOpenPanel()) // 열린 패널 없으면 설정창 열기
+		{
+			WHUD->ToggleSettings(); 
+		}
 	}
 }

@@ -3,6 +3,7 @@
 #include "Components/BoxComponent.h"
 #include "Kismet/GameplayStatics.h"
 #include "GameFramework/Pawn.h"
+#include "GameFramework/PlayerController.h"
 #include "WorldCCTVCameraDirector.h"
 
 AWorldCameraZoneTrigger::AWorldCameraZoneTrigger()
@@ -68,35 +69,60 @@ bool AWorldCameraZoneTrigger::IsPlayerActor(AActor* Actor) const
 
 void AWorldCameraZoneTrigger::ApplyZoneToPlayer(AActor* PlayerActor)
 {
-	if (!IsPlayerActor(PlayerActor))
-	{
-		return;
-	}
+	if (!IsPlayerActor(PlayerActor)) return;
 
 	EnsureDirector();
-	if (!Director)
-	{
-		return;
-	}
+	if (!Director) return;
 
 	if (bOverrideRotationSpeed)
 	{
 		Director->SetRotationInterpSpeed(RotationInterpSpeedOverride);
 	}
 
-	FWorldCameraZoneTransitionRequest Request;
-	Request.CameraAnchor = CameraAnchor;
-	Request.AnchorBlendTime = BlendTime;
-	Request.Priority = Priority;
-	Request.LevelsToLoad = LevelsToLoad;
-	Request.LevelsToUnload = LevelsToUnload;
-	Request.bUseFadeTransition = bUseFadeTransition;
-	Request.FadeOutDuration = FadeOutDuration;
-	Request.FadeInDuration = FadeInDuration;
-	Request.bFreezePlayerDuringTransition = bFreezePlayerDuringTransition;
-	Request.bBlockOnLevelStreaming = bBlockOnLevelStreaming;
+	// 삭제됨: LevelsToLoad / LevelsToUnload / bBlockOnLevelStreaming 관련 코드 전부 제거
 
-	Director->RequestZoneTransition(Request, PlayerActor);
+	// CCTV Director를 뷰타겟으로 전환
+	APlayerController* PC = UGameplayStatics::GetPlayerController(GetWorld(), 0);
+	if (!PC) return;
+
+	// Director 앵커 위치 이동
+	if (bUseFadeTransition)
+	{
+		// 페이드 사용 시 RequestZoneTransition (스트리밍 없는 버전)
+		FWorldCameraZoneTransitionRequest Request;
+		Request.CameraAnchor       = CameraAnchor;
+		Request.AnchorBlendTime    = BlendTime;
+		Request.Priority           = Priority;
+		Request.bUseFadeTransition = true;
+		Request.FadeOutDuration    = FadeOutDuration;
+		Request.FadeInDuration     = FadeInDuration;
+		Request.bFreezePlayerDuringTransition = bFreezePlayerDuringTransition;
+		Request.bBlockOnLevelStreaming = false;
+
+		Director->SetTargetActor(PlayerActor);
+		Director->RequestZoneTransition(Request, PlayerActor);
+	}
+	else
+	{
+		// 페이드 없이 앵커 이동 후 뷰타겟 전환
+		Director->SetTargetActor(PlayerActor);
+		Director->RequestAnchorTransform(CameraAnchor, BlendTime, Priority);
+	}
+
+	// 플레이어 컨트롤러 뷰타겟을 Director로 전환
+	PC->SetViewTargetWithBlend(Director, BlendTime);
+}
+
+void AWorldCameraZoneTrigger::RestorePlayerCamera()
+{
+	APlayerController* PC = UGameplayStatics::GetPlayerController(GetWorld(), 0);
+	if (!PC) return;
+
+	APawn* PlayerPawn = PC->GetPawn();
+	if (!PlayerPawn) return;
+
+	// 뷰타겟을 폰으로 복귀
+	PC->SetViewTargetWithBlend(PlayerPawn, BlendTime);
 }
 
 void AWorldCameraZoneTrigger::OnTriggerBeginOverlap(UPrimitiveComponent* OverlappedComp, AActor* OtherActor,
@@ -112,6 +138,4 @@ void AWorldCameraZoneTrigger::OnTriggerEndOverlap(UPrimitiveComponent* Overlappe
 	{
 		return;
 	}
-
-	// Current design keeps the active camera/streamed view until another zone takes over.
 }

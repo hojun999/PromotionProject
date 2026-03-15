@@ -1,7 +1,8 @@
 // Fill out your copyright notice in the Description page of Project Settings.
 
-
 #include "BattlePlayerController.h"
+
+#include "BaseHUD.h"
 #include "BattleControlSubsystem.h"
 #include "BattleHUD.h"
 #include "BattleBaseUnit.h"
@@ -22,6 +23,7 @@ void ABattlePlayerController::BeginPlay()
 	
 	BattleSub = GetWorld() ? GetWorld()->GetSubsystem<UBattleControlSubsystem>() : nullptr;
 	CacheBattleHUD();
+	CacheDefaultBattleCamera();
 	BindBattleDelegates();
 	
 	// 기본 입력 상태 설정
@@ -187,6 +189,25 @@ void ABattlePlayerController::FocusViewTarget(AActor* Target, float BlendTime)
 	SetViewTargetWithBlend(Target, BlendTime, VTBlend_Cubic);
 }
 
+void ABattlePlayerController::CacheDefaultBattleCamera()
+{
+	if (DefaultBattleCamera) return; // 이미 BP에서 할당된 경우 스킵
+
+	// BP에서 할당 안 됐을 때 태그로 자동 캐싱
+	TArray<AActor*> Found;
+	UGameplayStatics::GetAllActorsWithTag(GetWorld(), FName("DefaultBattleCamera"), Found);
+	if (Found.Num() > 0)
+	{
+		DefaultBattleCamera = Found[0];
+		UE_LOG(LogTemp, Warning, TEXT("[BattlePC] DefaultBattleCamera cached: %s"), *Found[0]->GetName());
+	}
+	else
+	{
+		UE_LOG(LogTemp, Warning, TEXT("[BattlePC] DefaultBattleCamera not found (tag or variable)"));
+	}
+}
+
+
 void ABattlePlayerController::FocusDefaultBattleCamera(float BlendTime)
 {
 	// 1. 월드에서 "DefaultBattleCamera" 태그를 가진 액터 탐색
@@ -348,12 +369,22 @@ void ABattlePlayerController::HandleBattleFinished(EBattleResult Result)
 				}
 				else
 				{
-					// Loot가 진짜 0이면 corpse 스폰 안 하게 처리
 					Transfer->MarkEncounterLooted(EncounterID);
 				}
 				
 				Transfer->MarkLastEncounterDefeated();
 			}
+
+			// 보스 전투 승리 → 게임 클리어 // 추가됨
+			if (Transfer->IsBossEncounter()) // 추가됨
+			{
+				UE_LOG(LogTemp, Warning, TEXT("[Battle] Boss defeated -> Game Clear!"));
+				if (BattleHUD) BattleHUD->ShowGameClearUI(); // 추가됨
+				UGameplayStatics::SetGamePaused(this, true); // 게임 정지 // 추가됨
+				Transfer->ClearPendingEncounter();
+				return; // 월드 복귀 없이 정지 상태 유지 // 추가됨
+			}
+
 			const FName ReturnWorld = Transfer->GetReturnWorldLevelName();
 			Transfer->ClearPendingEncounter();
 			
@@ -374,6 +405,7 @@ void ABattlePlayerController::HandleBattleFinished(EBattleResult Result)
 		UGameplayStatics::OpenLevel(this, FName("L_World"));
 	}, 2.0f, false);
 }
+
 
 void ABattlePlayerController::SetupInputComponent()
 {
@@ -440,6 +472,16 @@ void ABattlePlayerController::Input_ClickConfirmTarget()
 
 void ABattlePlayerController::Input_BackOrCancel()
 {
+	// 설정창 열려있으면 닫기, 없으면 설정창 열기
+	if (ABaseHUD* BaseHUD = Cast<ABaseHUD>(GetHUD()))
+	{
+		if (BaseHUD->IsSettingsOpen())
+		{
+			BaseHUD->ToggleSettings();
+			return;
+		}
+	}
+	
 	Input_CancelTarget();
 }
 
