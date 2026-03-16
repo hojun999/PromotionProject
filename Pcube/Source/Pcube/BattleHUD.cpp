@@ -380,3 +380,16 @@ void ABattleHUD::HandleBattleFinished(EBattleResult Result)
 		ShowGameOverUI();
 	}
 }
+
+void ABattleHUD::OnSettingsOpened()
+{
+	// 전투 중 ESC → 게임 일시정지 + 액션메뉴 숨김
+	UGameplayStatics::SetGamePaused(this, true);
+	HideActionMenu();
+}
+
+void ABattleHUD::OnSettingsClosed()
+{
+	// Resume → 일시정지 해제
+	UGameplayStatics::SetGamePaused(this, false);
+}

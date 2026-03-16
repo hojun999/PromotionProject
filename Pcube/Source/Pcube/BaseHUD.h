@@ -8,6 +8,14 @@
 
 class USettingsWidget;
 
+UENUM(BlueprintType)
+enum class EHUDType : uint8
+{
+	MainMenu   UMETA(DisplayName="MainMenu"),
+	OpenWorld  UMETA(DisplayName="OpenWorld"),
+	Battle     UMETA(DisplayName="Battle"),
+};
+
 UCLASS()
 class PCUBE_API ABaseHUD : public AHUD
 {
@@ -25,6 +33,14 @@ public:
 
 	USettingsWidget* GetSettingsWidget() const { return SettingsWidget; } // 추가됨
 
+	// HUD 타입 반환 - 서브클래스에서 오버라이드
+	UFUNCTION(BlueprintCallable, BlueprintPure, Category="UI")
+	virtual EHUDType GetHUDType() const { return EHUDType::OpenWorld; }
+	
+	// Pause 처리
+	virtual void OnSettingsOpened() {}   // 열릴 때 레벨별 처리
+	virtual void OnSettingsClosed() {}   // 닫힐 때 레벨별 처리
+	
 protected:
 	// BP_WorldHUD, BP_BattleHUD 에서 WBP_SettingsWidget 할당
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="UI|Settings")

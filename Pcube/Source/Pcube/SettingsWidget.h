@@ -4,11 +4,13 @@
 
 #include "CoreMinimal.h"
 #include "Blueprint/UserWidget.h"
+#include "BaseHUD.h"
 #include "SettingsWidget.generated.h"
 
 class UProgressBar;
 class UButton;
 class UAudioManagerSubsystem;
+class ABaseHUD;
 
 /**
  * ESC 설정창 위젯
@@ -35,6 +37,9 @@ public:
 	void Close();
 	bool IsOpen() const;
 
+	// 소유 HUD 설정 - Btn_Play 동작 분기에 사용
+	void SetOwningHUD(ABaseHUD* InHUD) { OwningHUD = InHUD; }
+	
 protected:
 	UPROPERTY(BlueprintReadWrite, meta=(BindWidget))
 	TObjectPtr<UProgressBar> PB_BGMVolume = nullptr;
@@ -58,22 +63,25 @@ protected:
 	UPROPERTY(BlueprintReadWrite, meta=(BindWidgetOptional))
 	TObjectPtr<UButton> Btn_Close = nullptr;
 
+	// L_MainMenu: 게임 시작 / L_OpenWorld, L_Battle : Resume // 추가됨
 	UPROPERTY(BlueprintReadWrite, meta=(BindWidgetOptional))
 	TObjectPtr<UButton> Btn_Play = nullptr; // Play/Resume
 
 private:
-	UFUNCTION()
-	void OnBGMUp();
-	UFUNCTION()
-	void OnBGMDown();
-	UFUNCTION()
-	void OnSFXUp();
-	UFUNCTION()
-	void OnSFXDown();
-	UFUNCTION()
-	void OnCloseClicked();
+	UFUNCTION() void OnBGMUp();
+	UFUNCTION() void OnBGMDown();
+	UFUNCTION() void OnSFXUp();
+	UFUNCTION() void OnSFXDown();
+	UFUNCTION() void OnCloseClicked();
+	UFUNCTION() void OnPlayClicked(); // HUD 타입 판별 분기
+	
 	UAudioManagerSubsystem* GetAudioManager() const;
 	void RefreshVolumeDisplay();
-
+	void ResumeGame(); // OpenWorld/Battle 공통 resume 처리
+	
+	// 소유 HUD 참조
+	UPROPERTY()
+	TObjectPtr<ABaseHUD> OwningHUD = nullptr;
+	
 	static constexpr float VolumeStep = 0.1f;
 };

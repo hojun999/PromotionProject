@@ -27,6 +27,7 @@ public:
 	TObjectPtr<USoundBase> BattleBGMSound = nullptr;
 
 	UBattleActionMenu* GetActionMenuWidget() const { return BattleActionMenuWidget; }
+	virtual EHUDType GetHUDType() const override { return EHUDType::Battle; }
 	
 	void ShowActionMenu(ABattleAllyUnit* AllyUnit);
 	void HideActionMenu();
@@ -126,6 +127,10 @@ protected:
 	
 	UFUNCTION()
 	void HandleBattleFinished(EBattleResult Result);
+	
+protected:
+	virtual void OnSettingsOpened() override; // 추가됨
+	virtual void OnSettingsClosed() override; // 추가됨
 	
 private:
 	void CreateAllWidgets();

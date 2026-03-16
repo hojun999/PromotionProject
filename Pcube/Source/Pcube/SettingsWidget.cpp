@@ -2,6 +2,7 @@
 
 #include "SettingsWidget.h"
 #include "AudioManagerSubsystem.h"
+#include "MainMenuHUD.h"
 #include "Components/ProgressBar.h"
 #include "Components/Button.h"
 #include "Kismet/GameplayStatics.h"

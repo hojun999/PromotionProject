@@ -67,7 +67,7 @@ private:
 	float BGMVolume = 1.0f;
 	float SFXVolume = 1.0f;
 
-	void ApplySoundMixOverride(USoundClass* SoundClass, float Volume);
-	void ApplyBGMVolume(); // BGM 볼륨 실제 적용
-    void ApplySFXVolume(); // SFX 볼륨 실제 적용
+	void ApplySoundMixOverride(USoundClass* SoundClass, float Volume); // 하위 호환용
+	void ApplyBGMVolume(); // BGM 볼륨 실제 적용 // 추가됨
+	void ApplySFXVolume(); // SFX 볼륨 실제 적용 // 추가됨
 };

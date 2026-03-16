@@ -20,6 +20,11 @@ class PCUBE_API AWorldHUD : public ABaseHUD
 	
 public:
 	virtual void BeginPlay() override;
+	virtual EHUDType GetHUDType() const overide { return EHUDType::OpenWorld; }
+	
+protected:
+	virtual void OnSettingsOpened() override; // Pause
+	virtual void OnSettingsClosed() override; // Unpause
 	
 	// --- 루팅 ---
 	void ShowLootWindow(ALootCorpseActor* Corpse); // 시체 대상 루팅 UI 표시
