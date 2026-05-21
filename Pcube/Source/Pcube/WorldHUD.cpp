@@ -2,6 +2,8 @@
 
 
 #include "WorldHUD.h"
+#include "WorldEnemyUnit.h"
+#include "EngineUtils.h"
 #include "LootCorpseActor.h"
 #include "LootWindowWidget.h"
 #include "InventoryWindowWidget.h"
@@ -306,3 +308,41 @@ void AWorldHUD::SetWorldInputBlocked(bool bBlocked)
 		PC->SetIgnoreLookInput(bBlocked);
 	}
 }
+
+void AWorldHUD::OnSettingsOpened()
+{
+	APlayerController* PC = GetOwningPlayerController();
+	if (PC && IsValid(PC->GetPawn()))
+	{
+		UGameplayStatics::SetGamePaused(this, true);
+		bIsPausedBySettings = true;
+	}
+
+	// 네비메시 AI는 SetGamePaused에 영향 안 받으므로 직접 정지
+	if (UWorld* World = GetWorld())
+	{
+		for (TActorIterator<AWorldEnemyUnit> It(World); It; ++It)
+		{
+			It->PausePatrol();
+		}
+	}
+}
+
+void AWorldHUD::OnSettingsClosed()
+{
+	if (bIsPausedBySettings)
+	{
+		UGameplayStatics::SetGamePaused(this, false);
+		bIsPausedBySettings = false;
+	}
+
+	// AI 이동 
+	if (UWorld* World = GetWorld())
+	{
+		for (TActorIterator<AWorldEnemyUnit> It(World); It; ++It)
+		{
+			It->ResumePatrol();
+		}
+	}
+}
+

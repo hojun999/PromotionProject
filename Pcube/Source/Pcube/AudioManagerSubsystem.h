@@ -22,6 +22,7 @@ class PCUBE_API UAudioManagerSubsystem : public UGameInstanceSubsystem
 	GENERATED_BODY()
 
 public:
+	UAudioManagerSubsystem();
 	virtual void Initialize(FSubsystemCollectionBase& Collection) override;
 
 	// ── 볼륨 설정 (0.0 ~ 1.0) ─────────────────────────────────
@@ -58,14 +59,16 @@ public:
 	TObjectPtr<USoundClass> SFXSoundClass = nullptr;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Audio|Setup")
-	TObjectPtr<USoundMix> MasterSoundMix = nullptr;
-
+	TObjectPtr<USoundMix> MainSoundMix = nullptr;
+	
+	
 private:
 	UPROPERTY()
 	TObjectPtr<UAudioComponent> BGMComponent = nullptr;
 
 	float BGMVolume = 1.0f;
 	float SFXVolume = 1.0f;
+	bool bIsBGMMuted = false; // 볼륨 0 상태 추적 // 추가됨
 
 	void ApplySoundMixOverride(USoundClass* SoundClass, float Volume); // 하위 호환용
 	void ApplyBGMVolume(); // BGM 볼륨 실제 적용 // 추가됨

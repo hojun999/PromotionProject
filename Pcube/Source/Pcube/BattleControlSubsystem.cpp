@@ -234,14 +234,12 @@ void UBattleControlSubsystem::OnBattleSetupFinished()
 
 void UBattleControlSubsystem::SetState(EBattleState NewState)
 {
-	// 해당 내용 있으면 갱신이 안되는 부분 있는지 확인되면 지우기 ***
 	if (CurrentState == NewState)
 	{
 		return;
 	}
 	
 	CurrentState = NewState;
-
 	if (OnBattleStateChanged.IsBound())
 	{
 		OnBattleStateChanged.Broadcast(CurrentState);
@@ -262,10 +260,8 @@ void UBattleControlSubsystem::SetState(EBattleState NewState)
 	case EBattleState::CheckCondition:
 		HandleCheckCondition(); break;
 	case EBattleState::Finished:
-		UE_LOG(LogTemp, Log, TEXT("전투가 완전히 종료되었습니다.")); break;
+		break; // 전투 종료;
 	}
-	
-	UE_LOG(LogTemp, Warning, TEXT("Current State: %hhd"), CurrentState);
 }
 
 void UBattleControlSubsystem::HandleNewRound()

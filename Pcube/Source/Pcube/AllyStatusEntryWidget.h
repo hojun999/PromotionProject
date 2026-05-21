@@ -27,7 +27,8 @@ protected:
 	UPROPERTY(meta=(BindWidget)) class UImage* PortraitImage;
 	UPROPERTY(meta=(BindWidget)) class UProgressBar* HPBar;
 	UPROPERTY(meta=(BindWidget)) class UTextBlock* HPText;
-	UPROPERTY(meta=(BindWidgetOptional)) class UBorder* ActiveBorder;
+	//UPROPERTY(meta=(BindWidgetOptional)) class UBorder* ActiveBorder;
+	UPROPERTY(meta=(BindWidgetOptional)) class UImage* ActiveImage;
 	
 	// --- Skill Point UI ---
 	UPROPERTY(meta=(BindWidget))

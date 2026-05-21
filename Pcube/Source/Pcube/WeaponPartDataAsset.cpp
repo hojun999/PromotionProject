@@ -19,6 +19,19 @@ FText UWeaponPartDataAsset::BuildEffectText() const
 	{
 		Lines.Add(FString::Printf(TEXT("SP 추가 획득 %d"), Effect.BonusSkillPointGain));
 	}
+	if (Effect.BonusMaxHP != 0)
+	{
+		Lines.Add(FString::Printf(TEXT("체력 추가 획득 %f.1"), Effect.BonusMaxHP));
+	}
+	if (Effect.BonusAttackPower != 0)
+	{
+		Lines.Add(FString::Printf(TEXT("공격력 추가 획득 %f.1"), Effect.BonusAttackPower));
+	}
+	if (Effect.BonusSpeed != 0)
+	{
+		Lines.Add(FString::Printf(TEXT("속도 추가 획득 %f.1"), Effect.BonusSpeed));
+	}
+	
 	
 	if (Lines.Num() == 0)
 	{

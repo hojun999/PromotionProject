@@ -25,12 +25,19 @@ void ABaseHUD::ToggleSettings()
 	if (SettingsWidget->IsOpen())
 	{
 		SettingsWidget->Close();
-		OnSettingsClosed(); // 닫힐 때 레벨별 처리
+		OnSettingsClosed(); // Pause 해제
+		// Pause 해제 후 입력 복구
+		if (APlayerController* PC = GetOwningPlayerController())
+		{
+			FInputModeGameOnly Mode;
+			PC->SetInputMode(Mode);
+			PC->bShowMouseCursor = false;
+		}
 	}
 	else
 	{
 		SettingsWidget->Open();
-		OnSettingsOpened(); // 열릴 때 레벨별 처리
+		OnSettingsOpened(); // 열릴 때 레벨별 처리 // 추가됨
 		// 열릴 때 커서 표시
 		if (APlayerController* PC = GetOwningPlayerController())
 		{

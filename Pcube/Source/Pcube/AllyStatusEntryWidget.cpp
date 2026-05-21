@@ -157,8 +157,13 @@ void UAllyStatusEntryWidget::HandleDied()
 
 void UAllyStatusEntryWidget::SetActive(bool bActive)
 {
-	if (ActiveBorder)
+	// if (ActiveBorder)
+	// {
+	// 	ActiveBorder->SetVisibility(bActive ? ESlateVisibility::Visible : ESlateVisibility::Hidden);
+	// }
+	
+	if (ActiveImage)
 	{
-		ActiveBorder->SetVisibility(bActive ? ESlateVisibility::Visible : ESlateVisibility::Hidden);
+		ActiveImage->SetVisibility(bActive ? ESlateVisibility::Visible : ESlateVisibility::Hidden);
 	}
 }

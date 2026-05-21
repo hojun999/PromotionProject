@@ -34,6 +34,10 @@ public:
 	void SetPatrolPoints(const TArray<FVector>& InPatrolPoints) { PatrolPoints = InPatrolPoints; }
 	void SetBossEncounter(bool bInIsBoss) { bIsBossEncounter = bInIsBoss; }
 	
+	// 게임 정지/재개 시 AI 이동 제어
+	void PausePatrol();
+	void ResumePatrol();
+	
 protected:
 	virtual void BeginPlay() override;
 	virtual void Tick(float DeltaTime) override;
@@ -69,7 +73,7 @@ protected:
 	void ConvertToCorpse();
 	
 	void Loot();
-
+	
 	// ── 순찰 / 추격 ────────────────────────────────────────
 
 	// 순찰 경유 포인트 (월드 좌표). 에디터에서 직접 입력
@@ -126,11 +130,13 @@ private:
 	void UpdateChase(float DeltaTime);
 	void SetAIState(EEnemyAIState NewState);
 	void MoveToNextPatrolPoint(); // 네비메시 기반 순찰 이동
-
+	
+	
 	UFUNCTION()
 	void OnPatrolMoveCompleted(FAIRequestID RequestID, EPathFollowingResult::Type Result);
 
 	bool bWaitingForPatrolMove = false; // 이동 중 중복 명령 방지
+	bool bPatrolPaused = false; // Pause 상태
 	
 	UPROPERTY(Transient)
 	bool bEncounterLocked = false;

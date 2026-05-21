@@ -33,7 +33,7 @@ enum class EBattleResult : uint8
 	Defeat
 };
 
-// 상태 변경 알림 - UI 모드 전환용
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FOnBattleUnitsSpawned, const TArray<AActor*>&, Allies, const TArray<AActor*>&, Enemis);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnBattleStateChanged, EBattleState, NewState);
 // 현재 턴 유닛 정보 전달 - 스킬 UI 갱신용
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnTurnUnitChanged, ABattleBaseUnit*, ActiveUnit);
@@ -41,18 +41,15 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnTurnUnitChanged, ABattleBaseUnit*
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnTurnOrderUpdated, const TArray<AActor*>&, ActionOrder);
 // 적 유닛 타겟팅 완료 시 Broadcast할 델리게이트
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnTargetChanged, AActor* , NewTarget);
-
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnBattleFinished, EBattleResult, Result);
 
-DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FOnBattleUnitsSpawned, const TArray<AActor*>&, Allies, const TArray<AActor*>&, Enemis);
+
 
 UCLASS()
 class PCUBE_API UBattleControlSubsystem : public UWorldSubsystem
 {
 	GENERATED_BODY()
-	
-	
-	
+
 public:
 	virtual void OnWorldBeginPlay(UWorld& InWorld) override;
 	

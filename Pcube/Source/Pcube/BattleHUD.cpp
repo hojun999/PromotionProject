@@ -13,6 +13,7 @@
 #include "Blueprint/UserWidget.h"
 #include "AudioManagerSubsystem.h"
 #include "Kismet/GameplayStatics.h"
+#include "SettingsWidget.h"
 
 void ABattleHUD::BeginPlay()
 {
@@ -143,6 +144,11 @@ void ABattleHUD::CreateAllWidgets()
 			DisplayCancelWidget->SetVisibility(ESlateVisibility::Collapsed); 
 		} 
 	} 
+	
+	if (SettingsWidgetClass)
+	{
+		
+	}
 }
 
 
@@ -383,13 +389,65 @@ void ABattleHUD::HandleBattleFinished(EBattleResult Result)
 
 void ABattleHUD::OnSettingsOpened()
 {
-	// 전투 중 ESC → 게임 일시정지 + 액션메뉴 숨김
 	UGameplayStatics::SetGamePaused(this, true);
-	HideActionMenu();
+	//HideActionMenu();
+
+	// 설정창 오픈 시 마우스 커서 표시 및 포커스 강제 설정
+	if (ABattlePlayerController* BPC = Cast<ABattlePlayerController>(GetOwningPlayerController()))
+	{
+		FInputModeGameAndUI Mode;
+		// BaseHUD에 있는 SettingsWidget을 포커스 (변수명은 프로젝트에 맞춰 수정)
+		if (SettingsWidget) 
+		{
+			Mode.SetWidgetToFocus(SettingsWidget->TakeWidget());
+		}
+		BPC->SetInputMode(Mode);
+		BPC->bShowMouseCursor = true;
+	}
 }
 
 void ABattleHUD::OnSettingsClosed()
 {
-	// Resume → 일시정지 해제
 	UGameplayStatics::SetGamePaused(this, false);
+
+	// 현재 전투 상태를 확인하여 UI 및 입력 모드 복구
+	if (UWorld* World = GetWorld())
+	{
+		if (UBattleControlSubsystem* BattleSub = World->GetSubsystem<UBattleControlSubsystem>())
+		{
+			ABattlePlayerController* BPC = Cast<ABattlePlayerController>(GetOwningPlayerController());
+			if (!BPC) return;
+
+			if (BattleSub->GetCurrentState() == EBattleState::ActionInput)
+			{
+				// 아군 턴인 경우 액션 메뉴 다시 표시
+				if (ABattleAllyUnit* AllyUnit = Cast<ABattleAllyUnit>(CurrentTurnUnit))
+				{
+					ShowActionMenu(AllyUnit);
+					BPC->bShowMouseCursor = true;
+					if (BattleActionMenuWidget)
+					{
+						FInputModeGameAndUI Mode;
+						Mode.SetWidgetToFocus(BattleActionMenuWidget->TakeWidget());
+						BPC->SetInputMode(Mode);
+					}
+				}
+			}
+			else if (BattleSub->GetCurrentState() == EBattleState::TargetSelection)
+			{
+				// 타겟 선택 중이었다면 게임 모드로 복귀
+				FInputModeGameOnly Mode;
+				BPC->SetInputMode(Mode);
+				BPC->bShowMouseCursor = true;
+			}
+			else
+			{
+				// 그 외(연출 중 등)에는 커서 숨김
+				FInputModeGameOnly Mode;
+				BPC->SetInputMode(Mode);
+				BPC->bShowMouseCursor = false;
+			}
+		}
+	}
 }
+

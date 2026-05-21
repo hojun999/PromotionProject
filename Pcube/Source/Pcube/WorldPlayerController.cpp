@@ -72,7 +72,10 @@ void AWorldPlayerController::SetupInputComponent()
 
 	InputComponent->BindKey(EKeys::I, IE_Pressed, this, &AWorldPlayerController::Input_ToggleInventory);
 	InputComponent->BindKey(EKeys::Tab, IE_Pressed, this, &AWorldPlayerController::Input_TogglePlayerInfo);
-	InputComponent->BindKey(EKeys::Escape, IE_Pressed, this, &AWorldPlayerController::Input_CloseUI);
+	
+	// bExecuteWhenPaused를 true로 설정하여 일시정지 중에도 ESC가 작동하게 함
+	FInputKeyBinding& EscBinding = InputComponent->BindKey(EKeys::Escape, IE_Pressed, this, &AWorldPlayerController::Input_CloseUI); // 수정됨
+	EscBinding.bExecuteWhenPaused = true; // 추가됨
 }
 
 bool AWorldPlayerController::IsCameraTransitionBusy() const
@@ -108,32 +111,25 @@ void AWorldPlayerController::Input_TogglePlayerInfo()
 
 void AWorldPlayerController::Input_CloseUI()
 {
-	if (IsCameraTransitionBusy())
+	if (IsCameraTransitionBusy()) return;
+
+	ABaseHUD* BaseHUD = Cast<ABaseHUD>(GetHUD());
+	AWorldHUD* WHUD = Cast<AWorldHUD>(BaseHUD);
+	if (!BaseHUD) return;
+
+	// 1. 설정창이 열려있으면 최우선으로 닫기
+	if (BaseHUD->IsSettingsOpen()) 
 	{
-		return;
+		BaseHUD->ToggleSettings(); 
+		return; 
 	}
 
-	if (AWorldHUD* WHUD = Cast<AWorldHUD>(GetHUD()))
+	// 2. 다른 UI(인벤토리 등)가 열려있으면 그것을 닫기
+	if (WHUD && WHUD->CloseAnyOpenPanel())
 	{
-		WHUD->CloseAnyOpenPanel();
-	}
-	
-	// 설정창이 열려있으면 닫기 우선 
-	if (ABaseHUD* BaseHUD = Cast<ABaseHUD>(GetHUD())) 
-	{
-		if (BaseHUD->IsSettingsOpen()) 
-		{
-			BaseHUD->ToggleSettings(); 
-			return; 
-		}
+		return; // 패널을 닫았다면 로직 종료
 	}
 
-	// 설정창 닫혀있으면 설정창 열기, 다른 UI도 없으면 
-	if (AWorldHUD* WHUD = Cast<AWorldHUD>(GetHUD()))
-	{
-		if (!WHUD->CloseAnyOpenPanel()) // 열린 패널 없으면 설정창 열기
-		{
-			WHUD->ToggleSettings(); 
-		}
-	}
+	// 3. 아무것도 열려있지 않다면 설정창 열기
+	BaseHUD->ToggleSettings();
 }

@@ -10,23 +10,17 @@
 void USettingsWidget::NativeConstruct()
 {
 	Super::NativeConstruct();
-
-	// AddDynamic은 람다 래퍼 불가 - 직접 바인딩
+	
 	if (Btn_Close)   Btn_Close->OnClicked.AddDynamic(this,   &USettingsWidget::OnCloseClicked);
+	if (Btn_Play)    Btn_Play->OnClicked.AddDynamic(this,    &USettingsWidget::OnPlayClicked);
 	if (Btn_BGMUp)   Btn_BGMUp->OnClicked.AddDynamic(this,   &USettingsWidget::OnBGMUp);
 	if (Btn_BGMDown) Btn_BGMDown->OnClicked.AddDynamic(this, &USettingsWidget::OnBGMDown);
 	if (Btn_SFXUp)   Btn_SFXUp->OnClicked.AddDynamic(this,   &USettingsWidget::OnSFXUp);
 	if (Btn_SFXDown) Btn_SFXDown->OnClicked.AddDynamic(this, &USettingsWidget::OnSFXDown);
-	if (Btn_Play)    Btn_Play->OnClicked.AddDynamic(this,    &USettingsWidget::OnCloseClicked); // Play = Close와 동일 동작
 
-	// 볼륨 초기값 0.5 설정
-	if (UAudioManagerSubsystem* AM = GetAudioManager())
-	{
-		if (AM->GetBGMVolume() == 1.0f) AM->SetBGMVolume(0.5f); // 기본값 그대로면 0.5로 설정
-		if (AM->GetSFXVolume() == 1.0f) AM->SetSFXVolume(0.5f);
-	}
+	// 레벨 이동 후에도 Subsystem의 값을 유지하기 위해 강제 설정 로직 삭제
+	RefreshVolumeDisplay(); // 현재 Subsystem 값으로 UI 동기화
 
-	// 생성 직후 숨김
 	SetVisibility(ESlateVisibility::Collapsed);
 }
 
@@ -39,13 +33,6 @@ void USettingsWidget::Open()
 void USettingsWidget::Close()
 {
 	SetVisibility(ESlateVisibility::Collapsed);
-	// 닫힐 때 커서 끄고 게임 입력 복구
-	if (APlayerController* PC = GetOwningPlayer())
-	{
-		FInputModeGameOnly Mode;
-		PC->SetInputMode(Mode);
-		PC->bShowMouseCursor = false;
-	}
 }
 
 bool USettingsWidget::IsOpen() const
@@ -109,3 +96,35 @@ void USettingsWidget::OnCloseClicked()
 	Close();
 }
 
+void USettingsWidget::OnPlayClicked()
+{
+	if (!OwningHUD) return;
+
+	// HUD 타입에 따라 분기
+	switch (OwningHUD->GetHUDType())
+	{
+	case EHUDType::MainMenu:
+		// L_MainMenu: 게임 시작 - MainMenuHUD에 위임
+		if (AMainMenuHUD* MainHUD = Cast<AMainMenuHUD>(OwningHUD))
+		{
+			MainHUD->OnGameStartRequested();
+		}
+		break;
+
+	case EHUDType::OpenWorld:
+	case EHUDType::Battle:
+		// L_OpenWorld / L_Battle: Resume
+		ResumeGame();
+		break;
+	}
+}
+
+void USettingsWidget::ResumeGame()
+{
+	Close();
+	UGameplayStatics::SetGamePaused(this, false);
+	if (OwningHUD)
+	{
+		OwningHUD->OnSettingsClosed();
+	}
+}

@@ -353,6 +353,14 @@ void ABattlePlayerController::HandleBattleFinished(EBattleResult Result)
 	{
 		if (Transfer)
 		{
+			// 보스 여부 확인 및 클리어 UI 호출
+			const bool bIsBoss = Transfer->IsBossEncounter();
+			if (BattleHUD && bIsBoss)
+			{
+				BattleHUD->ShowGameClearUI();
+				UGameplayStatics::SetGamePaused(GetWorld(), true);
+			}
+			
 			const FName EncounterID = Transfer->GetPendingEncounterID();
 			if (EncounterID == NAME_None)
 			{
@@ -369,22 +377,12 @@ void ABattlePlayerController::HandleBattleFinished(EBattleResult Result)
 				}
 				else
 				{
+					// Loot가 진짜 0이면 corpse 스폰 안 하게 처리
 					Transfer->MarkEncounterLooted(EncounterID);
 				}
 				
 				Transfer->MarkLastEncounterDefeated();
 			}
-
-			// 보스 전투 승리 → 게임 클리어 // 추가됨
-			if (Transfer->IsBossEncounter()) // 추가됨
-			{
-				UE_LOG(LogTemp, Warning, TEXT("[Battle] Boss defeated -> Game Clear!"));
-				if (BattleHUD) BattleHUD->ShowGameClearUI(); // 추가됨
-				UGameplayStatics::SetGamePaused(this, true); // 게임 정지 // 추가됨
-				Transfer->ClearPendingEncounter();
-				return; // 월드 복귀 없이 정지 상태 유지 // 추가됨
-			}
-
 			const FName ReturnWorld = Transfer->GetReturnWorldLevelName();
 			Transfer->ClearPendingEncounter();
 			
@@ -405,7 +403,6 @@ void ABattlePlayerController::HandleBattleFinished(EBattleResult Result)
 		UGameplayStatics::OpenLevel(this, FName("L_World"));
 	}, 2.0f, false);
 }
-
 
 void ABattlePlayerController::SetupInputComponent()
 {
@@ -472,16 +469,23 @@ void ABattlePlayerController::Input_ClickConfirmTarget()
 
 void ABattlePlayerController::Input_BackOrCancel()
 {
-	// 설정창 열려있으면 닫기, 없으면 설정창 열기
 	if (ABaseHUD* BaseHUD = Cast<ABaseHUD>(GetHUD()))
 	{
 		if (BaseHUD->IsSettingsOpen())
 		{
+			// Settings 열려있으면 닫기
+			BaseHUD->ToggleSettings();
+			return;
+		}
+		else if (BattleSub && BattleSub->GetCurrentState() == EBattleState::WaitTurn)
+		{
+			// 전투 대기 중 ESC → Settings 열기 // 추가됨
+			FlushPressedKeys();
 			BaseHUD->ToggleSettings();
 			return;
 		}
 	}
-	
+
 	Input_CancelTarget();
 }
 

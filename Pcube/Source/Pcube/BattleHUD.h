@@ -26,6 +26,10 @@ public:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Audio")
 	TObjectPtr<USoundBase> BattleBGMSound = nullptr;
 
+	// 전투 시작 효과음
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Audio")
+	TObjectPtr<USoundBase> BattleStartSFX = nullptr;
+	
 	UBattleActionMenu* GetActionMenuWidget() const { return BattleActionMenuWidget; }
 	virtual EHUDType GetHUDType() const override { return EHUDType::Battle; }
 	

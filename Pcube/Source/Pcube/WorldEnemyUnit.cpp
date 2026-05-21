@@ -194,6 +194,8 @@ void AWorldEnemyUnit::OnPatrolMoveCompleted(FAIRequestID RequestID, EPathFollowi
 
 void AWorldEnemyUnit::UpdatePatrol(float DeltaTime)
 {
+	if (bPatrolPaused) return;
+	
 	if (PatrolPoints.Num() == 0)
 	{
 		SetAIState(EEnemyAIState::Idle);
@@ -212,6 +214,8 @@ void AWorldEnemyUnit::UpdatePatrol(float DeltaTime)
 
 void AWorldEnemyUnit::UpdateChase(float DeltaTime)
 {
+	if (bPatrolPaused) return; // Pause 중 추격 금지
+	
 	AActor* Target = ChaseTarget.Get();
 
 	if (!IsValid(Target))
@@ -226,7 +230,6 @@ void AWorldEnemyUnit::UpdateChase(float DeltaTime)
 	// 추격은 매 틱 위치가 바뀌므로 지속적으로 이동 명령 갱신
 	UAIBlueprintHelperLibrary::SimpleMoveToLocation(GetController(), Target->GetActorLocation());
 }
-
 
 // ── 감지 이벤트 ───────────────────────────────────────────────
 
@@ -545,3 +548,23 @@ bool AWorldEnemyUnit::TrySpawnCorpseIfDefeated()
 	return true;
 }
 
+void AWorldEnemyUnit::PausePatrol()
+{
+	bPatrolPaused = true;
+	// AI 이동 즉시 정지
+	if (AAIController* Ctrl = Cast<AAIController>(GetController()))
+	{
+		Ctrl->StopMovement();
+	}
+}
+
+void AWorldEnemyUnit::ResumePatrol()
+{
+	bPatrolPaused = false;
+	bWaitingForPatrolMove = false; // 재개 시 이동 명령 허용
+	// 현재 상태에 맞게 이동 재개
+	if (AIState == EEnemyAIState::Patrol || AIState == EEnemyAIState::Chase)
+	{
+		MoveToNextPatrolPoint();
+	}
+}

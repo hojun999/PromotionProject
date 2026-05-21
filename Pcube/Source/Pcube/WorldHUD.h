@@ -20,11 +20,7 @@ class PCUBE_API AWorldHUD : public ABaseHUD
 	
 public:
 	virtual void BeginPlay() override;
-	virtual EHUDType GetHUDType() const overide { return EHUDType::OpenWorld; }
-	
-protected:
-	virtual void OnSettingsOpened() override; // Pause
-	virtual void OnSettingsClosed() override; // Unpause
+	virtual EHUDType GetHUDType() const override { return EHUDType::OpenWorld; }
 	
 	// --- 루팅 ---
 	void ShowLootWindow(ALootCorpseActor* Corpse); // 시체 대상 루팅 UI 표시
@@ -48,6 +44,13 @@ protected:
 	void ApplyInputMode_GameAndUI(UUserWidget* FocusWidget); // UI 조작 모드
 	void HideAllPanels(); // UI 간의 충돌 방지
 	void SetWorldInputBlocked(bool bBlocked);
+	
+protected:
+	virtual void OnSettingsOpened() override; // Pause
+	virtual void OnSettingsClosed() override; // Unpause
+	
+	// 최초 진입 시에는 Pause 없이 세팅창 열림
+	bool bIsPausedBySettings = false;
 	
 public:
 	// 레벨 BGM (에디터 BP_WorldHUD 에서 할당)
